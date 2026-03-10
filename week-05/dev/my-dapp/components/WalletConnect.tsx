@@ -20,7 +20,7 @@ export function WalletConnect() {
   });
 
   return (
-    <div className="flex flex-col gap-4">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       {/* Custom Connect Button */}
       <ConnectButton.Custom>
         {({
@@ -57,7 +57,7 @@ export function WalletConnect() {
                     <button
                       onClick={openConnectModal}
                       type="button"
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition"
+                      className="btn btn-primary"
                     >
                       지갑 연결하기
                     </button>
@@ -69,7 +69,7 @@ export function WalletConnect() {
                     <button
                       onClick={openChainModal}
                       type="button"
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition"
+                      className="btn btn-danger"
                     >
                       네트워크 전환 필요
                     </button>
@@ -77,39 +77,43 @@ export function WalletConnect() {
                 }
 
                 return (
-                  <div className="flex gap-2">
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button
                       onClick={openChainModal}
-                      className="px-3 py-1 bg-gray-200 rounded-lg text-sm flex items-center gap-1 hover:bg-gray-300 transition"
+                      className="btn btn-outline"
+                      style={{ padding: '0.5rem 1rem', width: 'auto' }}
                       type="button"
                     >
                       {chain.hasIcon && (
                         <div
                           style={{
                             background: chain.iconBackground,
-                            width: 12,
-                            height: 12,
+                            width: 16,
+                            height: 16,
                             borderRadius: 999,
                             overflow: 'hidden',
-                            marginRight: 4,
+                            marginRight: 8,
+                            display: 'inline-block',
+                            verticalAlign: 'middle'
                           }}
                         >
                           {chain.iconUrl && (
                             <img
                               alt={chain.name ?? 'Chain icon'}
                               src={chain.iconUrl}
-                              style={{ width: 12, height: 12 }}
+                              style={{ width: 16, height: 16 }}
                             />
                           )}
                         </div>
                       )}
-                      {chain.name}
+                      <span style={{ verticalAlign: 'middle' }}>{chain.name}</span>
                     </button>
 
                     <button
                       onClick={openAccountModal}
                       type="button"
-                      className="px-3 py-1 bg-gray-200 rounded-lg text-sm hover:bg-gray-300 transition"
+                      className="btn btn-outline"
+                      style={{ padding: '0.5rem 1rem', width: 'auto', flex: 1 }}
                     >
                       {account.displayName}
                       {account.displayBalance
@@ -125,21 +129,25 @@ export function WalletConnect() {
       </ConnectButton.Custom>
 
       {isConnected && (
-        <div className="p-4 bg-gray-100 rounded space-y-2">
-          <p className="font-medium">연결된 지갑</p>
+        <div className="wallet-info">
+          <p className="wallet-info-title">연결된 지갑 정보</p>
 
           {/* 지갑 주소 */}
-          <p className="text-sm text-gray-600">
-            주소: {address?.slice(0, 6)}...{address?.slice(-4)}
-          </p>
+          <div className="wallet-info-text">
+            <span>주소</span>
+            <span className="wallet-info-value">{address?.slice(0, 6)}...{address?.slice(-4)}</span>
+          </div>
 
           {/* ETH 잔액 */}
-          <p className="text-sm text-gray-600">
-            잔액: {isBalanceLoading
-              ? '로딩 중...'
-              : `${balance?.formatted ?? '0'} ${balance?.symbol ?? 'ETH'}`
-            }
-          </p>
+          <div className="wallet-info-text">
+            <span>잔액</span>
+            <span className="wallet-info-value">
+              {isBalanceLoading
+                ? '로딩 중...'
+                : `${Number(balance?.formatted || 0).toFixed(4)} ${balance?.symbol ?? 'ETH'}`
+              }
+            </span>
+          </div>
 
           {/* ============================================================
               TODO: 추가 기능 구현

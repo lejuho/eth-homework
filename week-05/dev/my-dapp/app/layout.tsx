@@ -6,6 +6,7 @@
 // RainbowKit의 UI 컴포넌트가 제대로 표시되려면
 // 반드시 이 스타일시트를 import해야 합니다.
 import '@rainbow-me/rainbowkit/styles.css';
+import './globals.css';
 
 import { RainbowKitProvider } from '@rainbow-me/rainbowkit';
 import { WagmiProvider } from 'wagmi';
