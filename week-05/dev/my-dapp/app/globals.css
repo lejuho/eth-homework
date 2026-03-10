@@ -210,3 +210,32 @@ body {
   background-color: #e0e7ff;
   color: #3730a3;
 }
+
+/* ============================================================
+   반응형 디자인 (Responsive Design)
+   ============================================================ */
+@media (max-width: 640px) {
+  body {
+    padding: 1rem;
+  }
+
+  .app-title {
+    font-size: 2rem;
+  }
+
+  .card {
+    padding: 1.25rem;
+  }
+
+  .wallet-buttons-container {
+    flex-direction: column;
+  }
+
+  .wallet-buttons-container > button {
+    width: 100% !important;
+  }
+
+  .form-input {
+    font-size: 16px; /* iOS Safari zoom 방지 */
+  }
+}

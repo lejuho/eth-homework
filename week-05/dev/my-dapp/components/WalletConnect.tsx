@@ -7,17 +7,21 @@
 // 지갑 연결 UI를 제공합니다.
 
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount, useBalance } from 'wagmi';
+import { useAccount, useBalance, useSwitchChain } from 'wagmi';
 
 export function WalletConnect() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chain: currentChain } = useAccount();
 
+  // query: { refetchInterval: 5000 } 를 통해 5초마다 잔액을 리패칭하여 변화를 감지합니다.
   const { data: balance, isLoading: isBalanceLoading } = useBalance({
     address: address,
     query: {
       enabled: isConnected,
+      refetchInterval: 5000,
     },
   });
+
+  const { chains, switchChain, isPending: isSwitching } = useSwitchChain();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -77,7 +81,7 @@ export function WalletConnect() {
                 }
 
                 return (
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div className="wallet-buttons-container" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                     <button
                       onClick={openChainModal}
                       className="btn btn-outline"
@@ -149,14 +153,28 @@ export function WalletConnect() {
             </span>
           </div>
 
-          {/* ============================================================
-              TODO: 추가 기능 구현
-              ============================================================
-              - 컨트랙트 상태 읽기 (useReadContract)
-              - 컨트랙트 함수 호출 (useWriteContract)
-              - 트랜잭션 히스토리 표시
-              - 토큰 잔액 표시 (ERC20)
-              ============================================================ */}
+          <div style={{ marginTop: '1rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+            <p className="wallet-info-title" style={{ marginBottom: '0.75rem' }}>네트워크 전환 (useSwitchChain)</p>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {chains.map((c) => (
+                <button
+                  key={c.id}
+                  disabled={currentChain?.id === c.id || isSwitching}
+                  onClick={() => switchChain({ chainId: c.id })}
+                  className="btn btn-outline"
+                  style={{ 
+                    padding: '0.4rem 0.8rem', 
+                    fontSize: '0.85rem', 
+                    width: 'auto',
+                    backgroundColor: currentChain?.id === c.id ? '#e2e8f0' : 'transparent',
+                    cursor: currentChain?.id === c.id ? 'default' : 'pointer'
+                  }}
+                >
+                  {c.name} {currentChain?.id === c.id && '(현재)'}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
