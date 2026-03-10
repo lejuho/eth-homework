@@ -13,7 +13,7 @@ import { sepolia } from 'wagmi/chains';
 // 주의: projectId 없이도 개발 서버에서는 동작하지만,
 // 프로덕션 배포 시 반드시 필요합니다.
 // ============================================================
-const WALLETCONNECT_PROJECT_ID = 'YOUR_PROJECT_ID';
+const WALLETCONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '6c433ba321999540dae0e8f1719def43';
 
 // ============================================================
 // wagmi 설정
