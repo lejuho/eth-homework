@@ -1,3 +1,9 @@
 [submodule "lib/forge-std"]
 	path = lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
+[submodule "week-06/dev/my-dapp/lib/forge-std"]
+	path = week-06/dev/my-dapp/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "week-06/dev/my-dapp/lib/openzeppelin-contracts"]
+	path = week-06/dev/my-dapp/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
