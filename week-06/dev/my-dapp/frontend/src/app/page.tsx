@@ -14,7 +14,6 @@ import { CommitForm } from '@/components/CommitForm'
 import { B3CommitForm } from '@/components/B3CommitForm'
 import { ExtraPickForm } from '@/components/ExtraPickForm'
 import { RevealForm } from '@/components/RevealForm'
-import { B6DeclareForm } from '@/components/B6DeclareForm'
 import { EyeCommitForm } from '@/components/EyeCommitForm'
 import { EyeRevealForm } from '@/components/EyeRevealForm'
 import { HashBreakdown } from '@/components/HashBreakdown'
@@ -597,9 +596,6 @@ export default function Home() {
                   <RevealForm roundId={activeRoundId} onSuccess={refetchAll} />
                 ) : hasRevealed ? (
                   <>
-                    {equippedPerkId === 'c10' && (
-                      <B6DeclareForm roundId={activeRoundId} onSuccess={refetchAll} />
-                    )}
                     <StatusHint color="amber" text="✓ Revealed — 눈치게임 시작을 기다리는 중" />
                   </>
                 ) : (

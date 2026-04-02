@@ -1034,16 +1034,6 @@ contract HexChainTest is Test {
     // 특전 테스트 — E-2 소수 집중
     // ─────────────────────────────────────────
 
-    function test_Perk_E2_PrimeFocus() public {
-        uint8 perk = game.PERK_E2();
-        // [3,5,7,11]: 소수 4개 ≥3 ✓
-        uint8[4] memory cA = [uint8(3), 5, 7, 11];
-        uint8[4] memory cB = [uint8(0), 1, 4, 6];
-        uint8[4] memory cC = [uint8(8), 9, 10, 12];
-        uint256 rid = _runPerkRound(cA, cB, cC, perk);
-        // surviving 4픽(전부 소수), pickSum base=40, E-2: +5×4=20 → 60×10=600
-        assertEq(_getScore(rid, playerA), 600, "E-2: 4 primes bonus");
-    }
 
     // ─────────────────────────────────────────
     // 특전 테스트 — E-3 공백 선점
@@ -1065,61 +1055,12 @@ contract HexChainTest is Test {
     // 특전 테스트 — E-4 레인 선언
     // ─────────────────────────────────────────
 
-    function test_Perk_E4_LaneDeclaration() public {
-        // hash nibble[0]=0xa=10, nibble[1]=0x3=3 → hashSum=13
-        bytes32 rh = bytes32(0xa300000000000000000000000000000000000000000000000000000000000000);
-        vm.setBlockhash(block.number - 1, rh); // 라운드 생성 전에 블록 해시 고정
-        uint256 rid = game.createRound();
-        uint8 perk = game.PERK_E4();
-
-        uint8[4] memory cA = [uint8(1), 3, 4, 5]; // sum=13
-        uint8[4] memory cB = [uint8(0), 2, 6, 7];
-        uint8[4] memory cC = [uint8(8), 9, 10, 11];
-
-        vm.prank(playerA); game.commit(rid, _commitHash(cA, 1), perk);
-        vm.prank(playerB); game.commit(rid, _commitHash(cB, 2), 0);
-        vm.prank(playerC); game.commit(rid, _commitHash(cC, 3), 0);
-
-        _doLock(rid, rh);
-        uint64 rb = _getRevealBlock(rid);
-        vm.roll(rb + 1);
-        _keeperReveal(rid, playerA, cA);
-        _keeperReveal(rid, playerB, cB);
-        _keeperReveal(rid, playerC, cC);
-        _doOpenEye(rid);
-        _doLockEye(rid);
-        _doAdvanceToSettle(rid);
-        game.settle(rid);
-
-        // rh에서 nibble 0xa: 1회→15x, nibble 0x3: 1회→15x, 나머지→10x
-        // A [1,3,4,5]: nibbleMult[1]=10,nibbleMult[3]=15,nibbleMult[4]=10,nibbleMult[5]=10
-        // base=(10+15+10+10)*10=450, +E4=150 → 600
-        assertEq(_getScore(rid, playerA), 600, "E-4: pick sum matches hash nibbles");
-    }
 
     // ─────────────────────────────────────────
     // 특전 테스트 — E-5 구간 분산
     // ─────────────────────────────────────────
 
-    function test_Perk_E5_ZoneDistributed() public {
-        uint8 perk = game.PERK_E5();
-        // [1,4,8,12]: [0-3]→1, [4-7]→4, [8-b]→8, [c-f]→12 ✓
-        uint8[4] memory cA = [uint8(1), 4, 8, 12];
-        uint8[4] memory cB = [uint8(0), 2, 3, 5];
-        uint8[4] memory cC = [uint8(6), 7, 9, 10];
-        uint256 rid = _runPerkRound(cA, cB, cC, perk);
-        // 4픽 생존, base=10×4×10=400, E-5: +30×4=120 → 520
-        assertEq(_getScore(rid, playerA), 520, "E-5: zone distributed bonus");
-    }
 
-    function test_Perk_E5_NoBonus_SameZone() public {
-        uint8 perk = game.PERK_E5();
-        uint8[4] memory cA = [uint8(0), 1, 2, 3]; // 전부 [0-3] → 미발동
-        uint8[4] memory cB = [uint8(4), 5, 6, 7];
-        uint8[4] memory cC = [uint8(8), 9, 10, 11];
-        uint256 rid = _runPerkRound(cA, cB, cC, perk);
-        assertEq(_getScore(rid, playerA), 600, "E-5: same zone -> no bonus");
-    }
 
     // ─────────────────────────────────────────
     // 특전 테스트 — B-1 극단 선택자
@@ -1235,14 +1176,6 @@ contract HexChainTest is Test {
      * B-5: cnt=2 → forfeit=0 → eyeSuccess=true
      * mask={0,1,2,3}, pickSum=60, score=60×20+10×10=1300
      */
-    function test_Perk_B5_TwoWayCollision_NoForfeit() public {
-        uint8 perk = game.PERK_B5();
-        uint8[4] memory cA = [uint8(0), 1, 2, 3];
-        uint8[4] memory cB = [uint8(4), 5, 6, 7];
-        uint8[4] memory cC = [uint8(8), 9, 10, 11];
-        uint256 rid = _runPerkRoundWithEye(cA, cB, cC, perk, 1, 1, 2);
-        assertEq(_getScore(rid, playerA), 1300, "B-5: 2-way collision -> no forfeit");
-    }
 
     /**
      * 3-way 충돌: cnt=3 → B-5: forfeit=1
@@ -1250,15 +1183,6 @@ contract HexChainTest is Test {
      * mask={0,2,3}, pickSum=30+10+10=50, eyeSuccess=false
      * score=50×10=500
      */
-    function test_Perk_B5_ThreeWayCollision_ReducedForfeit() public {
-        uint8 perk = game.PERK_B5();
-        uint8[4] memory cA = [uint8(0), 1, 2, 3];
-        uint8[4] memory cB = [uint8(4), 5, 6, 7];
-        uint8[4] memory cC = [uint8(8), 9, 10, 11];
-        // 3-way 충돌: 모두 order=1
-        uint256 rid = _runPerkRoundWithEye(cA, cB, cC, perk, 1, 1, 1);
-        assertEq(_getScore(rid, playerA), 500, "B-5: 3-way collision -> forfeit 1");
-    }
 
     // ─────────────────────────────────────────
     // 특전 테스트 — B-7 픽-순서 연동
@@ -1269,27 +1193,8 @@ contract HexChainTest is Test {
      * nibble1이 생존마스크에 있음 → pickSum += nibbleMult[1]*5 = 10*5=50
      * pickSum base=60+50=110, score=110×20+10×10=2200+100=2300
      */
-    function test_Perk_B7_OrderMatchesSurvivingPick() public {
-        uint8 perk = game.PERK_B7();
-        uint8[4] memory cA = [uint8(0), 1, 2, 3];
-        uint8[4] memory cB = [uint8(4), 5, 6, 7];
-        uint8[4] memory cC = [uint8(8), 9, 10, 11];
-        uint256 rid = _runPerkRoundWithEye(cA, cB, cC, perk, 1, 2, 3);
-        assertEq(_getScore(rid, playerA), 2300, "B-7: order=1, nibble1 alive -> x1.5");
-    }
 
     /// B-7: 순서번호와 같은 hex 픽이 없을 때 미발동
-    function test_Perk_B7_NoMatchingPick_NoBonus() public {
-        uint8 perk = game.PERK_B7();
-        // A: [0,2,3,4], nibble1 없음, eyeOrder=1
-        uint8[4] memory cA = [uint8(0), 2, 3, 4];
-        uint8[4] memory cB = [uint8(5), 6, 7, 8];
-        uint8[4] memory cC = [uint8(9), 10, 11, 12];
-        uint256 rid = _runPerkRoundWithEye(cA, cB, cC, perk, 1, 2, 3);
-        // nibble0=30x, nibble2,3,4=10x → pickSum=60
-        // eyeSuccess, score=60×20+10×10=1300, no B-7
-        assertEq(_getScore(rid, playerA), 1300, "B-7: no matching pick -> no bonus");
-    }
 
     // ─────────────────────────────────────────
     // 특전 테스트 — B-8 집중 도박
@@ -1592,16 +1497,6 @@ contract HexChainTest is Test {
      * B: cnt=1, eyeSuccess(order=3), pickSum=40, score=40×12+5×10=530
      * C: cnt=1, eyeSuccess(order=2), pickSum=40, score=40×15+7×10=670
      */
-    function test_Perk_H5_BumpsOpponent_ToEmptySlot() public {
-        uint8 perkH5 = game.PERK_G5();
-        uint8[4] memory cA = [uint8(8), 9, 10, 11];
-        uint8[4] memory cB = [uint8(4), 5, 6, 7];
-        uint8[4] memory cC = [uint8(12), 13, 14, 15];
-        uint256 rid = _runPerkRoundFull(cA, cB, cC, perkH5, 0, 0, 1, 1, 2);
-        assertEq(_getScore(rid, playerA), 900,  "H-5: A claims order1");
-        assertEq(_getScore(rid, playerB), 530,  "H-5: B bumped to order3");
-        assertEq(_getScore(rid, playerC), 670,  "H-5: C unaffected");
-    }
 
     /**
      * 3-way 충돌에서 H-5: A(H-5,1), B(1), C(1)
@@ -1614,16 +1509,6 @@ contract HexChainTest is Test {
      * B: cnt=2 at order=2, forfeit 1 → {5,6,7}, pickSum=30, eyeSuccess=false, score=300
      * C: cnt=2 at order=2, forfeit 1 → {13,14,15}, pickSum=30, eyeSuccess=false, score=300
      */
-    function test_Perk_H5_ThreeWay_BumpedPlayersCollide() public {
-        uint8 perkH5 = game.PERK_G5();
-        uint8[4] memory cA = [uint8(8), 9, 10, 11];
-        uint8[4] memory cB = [uint8(4), 5, 6, 7];
-        uint8[4] memory cC = [uint8(12), 13, 14, 15];
-        uint256 rid = _runPerkRoundFull(cA, cB, cC, perkH5, 0, 0, 1, 1, 1);
-        assertEq(_getScore(rid, playerA), 900, "H-5: A alone at order1, succeeds");
-        assertEq(_getScore(rid, playerB), 300, "H-5: B bumped to order2, collides with C");
-        assertEq(_getScore(rid, playerC), 300, "H-5: C bumped to order2, collides with B");
-    }
 
     /**
      * H-5 order=2 선점: C가 order=1에 있을 때 B(2)는 order=3으로 밀려남
@@ -1637,17 +1522,6 @@ contract HexChainTest is Test {
      * B: order=3, score=40×12+5×10=530
      * C: order=1 (unchanged), score=40×20+10×10=900
      */
-    function test_Perk_H5_Order2_BumpsTo3_WhenOrder1Taken() public {
-        uint8 perkH5 = game.PERK_G5();
-        uint8[4] memory cA = [uint8(8), 9, 10, 11];
-        uint8[4] memory cB = [uint8(4), 5, 6, 7];
-        uint8[4] memory cC = [uint8(12), 13, 14, 15];
-        // A=order2(H-5), B=order2, C=order1
-        uint256 rid = _runPerkRoundFull(cA, cB, cC, perkH5, 0, 0, 2, 2, 1);
-        assertEq(_getScore(rid, playerA), 670, "H-5 order2: A claims order2");
-        assertEq(_getScore(rid, playerB), 530, "H-5 order2: B bumped to order3 (1 was taken)");
-        assertEq(_getScore(rid, playerC), 900, "H-5 order2: C at order1 untouched");
-    }
 
     /**
      * H-5 order=2 선점: C가 order=3에 있을 때 B(2)는 order=1로 밀려남
@@ -1661,17 +1535,6 @@ contract HexChainTest is Test {
      * B: order=1 (낮은 슬롯 → 높은 배수), score=900
      * C: order=3 (unchanged), score=530
      */
-    function test_Perk_H5_Order2_BumpsTo1_WhenOrder1Empty() public {
-        uint8 perkH5 = game.PERK_G5();
-        uint8[4] memory cA = [uint8(8), 9, 10, 11];
-        uint8[4] memory cB = [uint8(4), 5, 6, 7];
-        uint8[4] memory cC = [uint8(12), 13, 14, 15];
-        // A=order2(H-5), B=order2, C=order3
-        uint256 rid = _runPerkRoundFull(cA, cB, cC, perkH5, 0, 0, 2, 2, 3);
-        assertEq(_getScore(rid, playerA), 670, "H-5 order2: A claims order2");
-        assertEq(_getScore(rid, playerB), 900, "H-5 order2: B bumped to order1 (empty, higher mult)");
-        assertEq(_getScore(rid, playerC), 530, "H-5 order2: C at order3 untouched");
-    }
 
     /**
      * H-3 저지불가: H-2 처형으로부터 면역
@@ -1943,53 +1806,6 @@ contract HexChainTest is Test {
      * A eyeSuccess(cnt=1 at order=2)
      * score = 68×15 + 7×10 = 1020+70 = 1090
      */
-    function test_Perk_B6_Mismatch_Bonus() public {
-        bytes32 rh = bytes32(uint256(1));
-        vm.setBlockhash(block.number - 1, rh);
-        uint256 rid = game.createRound();
-        uint8 perkB6 = game.PERK_B6();
-
-        uint8[4] memory cA = [uint8(0), 1, 2, 3];
-        uint8[4] memory cB = [uint8(4), 5, 6, 7];
-        uint8[4] memory cC = [uint8(8), 9, 10, 11];
-
-        vm.prank(playerA); game.commit(rid, _commitHash(cA, 1), perkB6);
-        vm.prank(playerB); game.commit(rid, _commitHash(cB, 2), 0);
-        vm.prank(playerC); game.commit(rid, _commitHash(cC, 3), 0);
-
-        _doLock(rid, rh);
-        uint64 rb = _getRevealBlock(rid);
-        vm.roll(rb + 1);
-        _keeperReveal(rid, playerA, cA);
-        _keeperReveal(rid, playerB, cB);
-        _keeperReveal(rid, playerC, cC);
-
-        // B6: LOCKED 단계에서 페이크 선언 (declared=1, actual=2 → 미스매치)
-        vm.prank(playerA); game.declareForReveal(rid, 1);
-
-        _doOpenEye(rid);
-
-        // A: 실제=2
-        bytes32 esA = bytes32(uint256(10));
-        bytes32 esB = bytes32(uint256(20));
-        bytes32 esC = bytes32(uint256(30));
-        vm.prank(playerA); game.eyeCommit(rid, _eyeHash(2, esA));
-        vm.prank(playerB); game.eyeCommit(rid, _eyeHash(1, esB));
-        vm.prank(playerC); game.eyeCommit(rid, _eyeHash(3, esC));
-
-        _doLockEye(rid);
-        uint64 erb = _getEyeRevealBlock(rid);
-        vm.roll(erb + 1);
-        vm.prank(playerA); game.eyeReveal(rid, 2, esA);
-        vm.prank(playerB); game.eyeReveal(rid, 1, esB);
-        vm.prank(playerC); game.eyeReveal(rid, 3, esC);
-
-        _doAdvanceToSettle(rid);
-        game.settle(rid);
-
-        // A: mismatch bonus → score=1090
-        assertEq(_getScore(rid, playerA), 1090, "B-6: mismatch -> +popcount*0.2x per pick");
-    }
 
     /**
      * B6 매치: 선언한 순서 = 실제 순서 + eyeSuccess → score += pickSum * 3
@@ -2003,53 +1819,6 @@ contract HexChainTest is Test {
      * B6 match bonus = 60×3 = 180
      * total = 1150
      */
-    function test_Perk_B6_Match_Bonus() public {
-        bytes32 rh = bytes32(uint256(1));
-        vm.setBlockhash(block.number - 1, rh);
-        uint256 rid = game.createRound();
-        uint8 perkB6 = game.PERK_B6();
-
-        uint8[4] memory cA = [uint8(0), 1, 2, 3];
-        uint8[4] memory cB = [uint8(4), 5, 6, 7];
-        uint8[4] memory cC = [uint8(8), 9, 10, 11];
-
-        vm.prank(playerA); game.commit(rid, _commitHash(cA, 1), perkB6);
-        vm.prank(playerB); game.commit(rid, _commitHash(cB, 2), 0);
-        vm.prank(playerC); game.commit(rid, _commitHash(cC, 3), 0);
-
-        _doLock(rid, rh);
-        uint64 rb = _getRevealBlock(rid);
-        vm.roll(rb + 1);
-        _keeperReveal(rid, playerA, cA);
-        _keeperReveal(rid, playerB, cB);
-        _keeperReveal(rid, playerC, cC);
-
-        // B6: LOCKED 단계에서 페이크 선언 (declared=2, actual=2 → 매치)
-        vm.prank(playerA); game.declareForReveal(rid, 2);
-
-        _doOpenEye(rid);
-
-        // A: 실제=2
-        bytes32 esA = bytes32(uint256(10));
-        bytes32 esB = bytes32(uint256(20));
-        bytes32 esC = bytes32(uint256(30));
-        vm.prank(playerA); game.eyeCommit(rid, _eyeHash(2, esA));
-        vm.prank(playerB); game.eyeCommit(rid, _eyeHash(1, esB));
-        vm.prank(playerC); game.eyeCommit(rid, _eyeHash(3, esC));
-
-        _doLockEye(rid);
-        uint64 erb = _getEyeRevealBlock(rid);
-        vm.roll(erb + 1);
-        vm.prank(playerA); game.eyeReveal(rid, 2, esA);
-        vm.prank(playerB); game.eyeReveal(rid, 1, esB);
-        vm.prank(playerC); game.eyeReveal(rid, 3, esC);
-
-        _doAdvanceToSettle(rid);
-        game.settle(rid);
-
-        // A: match bonus → score=1150
-        assertEq(_getScore(rid, playerA), 1150, "B-6: match + eyeSuccess -> +pickSum*0.3");
-    }
 
     /**
      * A-6 미발동: 겹침이 없을 때

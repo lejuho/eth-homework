@@ -27,7 +27,6 @@ import "./RevealVerifier.sol";
  */
 
 contract HexChain {
-
     Groth16Verifier public immutable revealVerifier;
 
     // ─────────────────────────────────────────
@@ -60,9 +59,9 @@ contract HexChain {
     uint8 public constant PERK_B2 = 8;  // 고독한 질주 — eyeSuccess + 빈 슬롯 → +1.5pt
     uint8 public constant PERK_B3 = 9;  // 라스트 스탠드 — 공개 단독 픽, 생존 시 ×3.0 + 최대 눈치 배수
     uint8 public constant PERK_B4 = 10; // 선제 희생   — 최고배율 픽 희생 → 겹침 완전 면제
-    uint8 public constant PERK_B5 = 11; // 보험        — 포기 픽 수 -1
-    uint8 public constant PERK_B6 = 12; // 페이크 선언 — 선언=실제 배수+0.3 / 불일치 배율+0.2
-    uint8 public constant PERK_B7 = 13; // 픽-순서 연동 — 순서번호=hex픽 생존 시 해당 픽 ×1.5
+    // PERK_B5 (보험) 삭제됨
+    // PERK_B6 (페이크 선언) 삭제됨
+    // PERK_B7 (픽-순서 연동) 삭제됨
     uint8 public constant PERK_B8 = 44; // 집중 도박   — 상위 2픽만 유효, 1번 단독 성공 시 ×3.5
     // Category C — 정보 교란형 (perkId 14~22)
     uint8 public constant PERK_C1 = 14; // 겹침 목록 열람 — getOverlappingNibbles() 읽기 특전
@@ -78,10 +77,10 @@ contract HexChain {
     uint8 public constant PERK_D5 = 45; // 데스페라도 — 상위 2픽 압축 + 겹침 면제, 적중 결과에 따라 보너스/페널티
     // Category E — 규칙 조작형 (perkId 27~32)
     uint8 public constant PERK_E1 = 27; // 서로소 보너스 — 4픽 서로소 → 생존 픽 +0.2x
-    uint8 public constant PERK_E2 = 28; // 소수 집중    — 소수 3개+ → 생존 소수 픽 +0.5x
+    // PERK_E2 (소수 집중) 삭제됨
     uint8 public constant PERK_E3 = 29; // 공백 선점    — 0회 nibble 3개+ → 해당 생존 픽 +0.3x
-    uint8 public constant PERK_E4 = 30; // 레인 선언    — 픽합 = 해시 첫두 nibble합 → +1.0pt
-    uint8 public constant PERK_E5 = 31; // 구간 분산    — 4구간 각 1개 → 생존 픽당 +0.15pt
+    // PERK_E4 (레인 선언) 삭제됨
+    // PERK_E5 (구간 분산) 삭제됨
     // PERK_E6 (사분면 분산) 삭제됨
     // Category F — 함정형 (perkId 33~36, 구 G)
     uint8 public constant PERK_F1 = 33; // 숫자 함정 — trapNibble 픽한 상대 해당 배율 절반
@@ -93,7 +92,7 @@ contract HexChain {
     uint8 public constant PERK_G2 = 38; // 처형      — 약화된 상대(≤1픽) 같은 순서 → 처치 + orderCount 제외
     uint8 public constant PERK_G3 = 39; // 저지불가  — 상대 특전 효과 면역 (처형 포함)
     uint8 public constant PERK_G4 = 40; // 강제교환 — 타겟 최고배율 픽 ↔ 내 최저배율 픽 스왑
-    uint8 public constant PERK_G5 = 41; // 순서 선점 — 내 순서 독점, 상대를 빈 슬롯으로 밀어냄
+    // PERK_G5 (순서 선점) 삭제됨
     uint8 public constant PERK_G6 = 42; // 편승       — 타겟 플레이어 eyeMult를 자신에게 적용
     // PERK_G7 (픽미러링) 삭제됨
 
@@ -201,6 +200,8 @@ contract HexChain {
     error HashNotAvailable();
     error HashExpired();
     error NotOperator();
+    error InvalidZKProof();
+    error CommitHashMismatch();
     error InvalidEyeOrder();
     error InvalidTrap();
     error InvalidTarget();
@@ -368,8 +369,8 @@ contract HexChain {
             revert AlreadyRevealed();
         }
 
-        require(revealVerifier.verifyProof(pA, pB, pC, pubSignals), "Invalid ZK proof");
-        require(pubSignals[0] == cm.commitHash, "CommitHash mismatch");
+        if (!revealVerifier.verifyProof(pA, pB, pC, pubSignals)) revert InvalidZKProof();
+        if (pubSignals[0] != cm.commitHash) revert CommitHashMismatch();
 
         cm.pickedMask = uint16(pubSignals[1]);
         cm.revealed   = true;
@@ -413,24 +414,6 @@ contract HexChain {
 
         cm.eyeCommitHash = eyeCommitHash;
         emit EyeCommitted(roundId, msg.sender);
-    }
-
-    // ─────────────────────────────────────────
-    // 6-b. B-6 픽 리빌 페이즈 선언 — LOCKED 상태에서 페이크 순서 공개
-    //      눈치게임 시작 전에 허위 순서를 선언, 실제 눈치 순서는 별도 eyeCommit
-    // ─────────────────────────────────────────
-
-    function declareForReveal(uint256 roundId, uint8 declaredOrder) external {
-        Round      storage r  = rounds[roundId];
-        Commitment storage cm = commitments[roundId][msg.sender];
-
-        if (r.state != RoundState.LOCKED)                       revert RoundNotLocked();
-        if (block.number > r.revealBlock + REVEAL_WINDOW)       revert RevealWindowClosed();
-        if (cm.commitHash == 0)                                 revert NotCommitted();
-        if (cm.perkId != PERK_B6)                              revert NotPerkHolder();
-        if (declaredOrder == 0 || declaredOrder > 3)            revert InvalidEyeOrder();
-
-        cm.declaredOrder = declaredOrder; // 눈치게임 전 상대에게 공개되는 허위 선언
     }
 
     // ─────────────────────────────────────────
@@ -525,7 +508,6 @@ contract HexChain {
         if (cm.eyeCommitHash == bytes32(0))                         revert NotCommitted();
         if (cm.eyeRevealed)                                         revert AlreadyEyeRevealed();
         if (order == 0 || order > 3)                                revert InvalidEyeOrder();
-        if (cm.perkId == PERK_G5 && order == 3)                    revert InvalidEyeOrder(); // H-5: 1,2번만 허용
         if (keccak256(abi.encodePacked(order, salt)) != cm.eyeCommitHash) revert InvalidEyeReveal();
 
         cm.eyeOrder    = order;
@@ -554,7 +536,6 @@ contract HexChain {
         if (cm.eyeCommitHash == bytes32(0))                         revert NotCommitted();
         if (cm.eyeRevealed)                                         revert AlreadyEyeRevealed();
         if (order == 0 || order > 3)                                revert InvalidEyeOrder();
-        if (cm.perkId == PERK_G5 && order == 3)                    revert InvalidEyeOrder(); // H-5: 1,2번만 허용
         if (keccak256(abi.encodePacked(order, salt)) != cm.eyeCommitHash) revert InvalidEyeReveal();
 
         cm.eyeOrder    = order;
@@ -693,30 +674,6 @@ contract HexChain {
             if (cm.eyeRevealed) orderCount[cm.eyeOrder]++;
         }
 
-        // ── H-5 순서 선점 사전 패스 ─────────────────────────────────────
-        // H-5 플레이어와 같은 eyeOrder를 선택한 상대를 모두 같은 빈 슬롯으로 밀어냄
-        // 목적지 슬롯은 1개로 고정 → 밀려난 플레이어끼리 그 슬롯에서 재충돌
-        for (uint16 i = 0; i < playerCount; i++) {
-            Commitment storage cmH5 = commitments[roundId][_players[roundId][i]];
-            if (cmH5.perkId != PERK_G5 || !cmH5.eyeRevealed) continue;
-            // 목적지 빈 슬롯 단 1개 탐색 (1→2→3, H-5 슬롯 제외)
-            uint8 destOrder = 0;
-            for (uint8 o = 1; o <= 3; o++) {
-                if (o == cmH5.eyeOrder) continue;
-                if (orderCount[o] == 0) { destOrder = o; break; }
-            }
-            if (destOrder == 0) continue; // 빈 슬롯 없음 → 일반 충돌
-            // 충돌자 전원을 동일한 목적지로 이동
-            for (uint16 j = 0; j < playerCount; j++) {
-                if (i == j) continue;
-                Commitment storage tgt = commitments[roundId][_players[roundId][j]];
-                if (!tgt.eyeRevealed || tgt.eyeOrder != cmH5.eyeOrder) continue;
-                orderCount[tgt.eyeOrder]--;
-                tgt.eyeOrder = destOrder;
-                orderCount[destOrder]++;
-            }
-        }
-
         // (G-2 처형은 Phase 1 충돌 이후로 이동 — 충돌 결과로 1픽 남은 상대를 연쇄 처형)
 
         // B-2: 순서 1~3 중 아무도 선택 안 한 빈 슬롯 여부 (pre-pass 이후 계산)
@@ -739,14 +696,6 @@ contract HexChain {
                     // B-4 선제 희생: 최고배율 픽 1개 희생 → 겹침 완전 면제
                     mask = _forfeitHighestPick(mask, nibbleMult);
                     eyeSuccess = true;
-                } else if (cm.perkId == PERK_B5 && cnt > 1) {
-                    // B-5 보험: 포기 픽 수 -1 (cnt-1 → cnt-2, 최소 0)
-                    uint8 forfeit = cnt >= 3 ? cnt - 2 : 0;
-                    if (forfeit > 0) {
-                        mask = _forfeitLowestPicks(mask, nibbleMult, forfeit);
-                    } else {
-                        eyeSuccess = true;
-                    }
                 } else if (cnt > 1) {
                     mask = _forfeitLowestPicks(mask, nibbleMult, cnt - 1);
                 } else {
@@ -982,9 +931,9 @@ contract HexChain {
             // 유효 특전 결정
             uint8 effectivePerk = cm.perkId;
 
-            // C9 순서 교란: B 특전 무력화 (perkId B1~B7, B8)
+            // C9 순서 교란: B 특전 무력화 (perkId 7~13 범위 + B8)
             if (isBShuffled[i] && (
-                    (effectivePerk >= PERK_B1 && effectivePerk <= PERK_B7) ||
+                    (effectivePerk >= PERK_B1 && effectivePerk <= 13) ||
                     effectivePerk == PERK_B8)) {
                 effectivePerk = 0;
             }
@@ -1014,28 +963,10 @@ contract HexChain {
                 pickSum += uint32(_popcount16(mask)) * 2;
             }
 
-            // B-6 페이크 선언 — 미스매치: 배율 +0.2 (eye 배율 곱 전)
-            if (effectivePerk == PERK_B6 && cm.declaredOrder > 0 && cm.eyeRevealed
-                    && cm.declaredOrder != cm.eyeOrder) {
-                pickSum += uint32(_popcount16(mask)) * 2;
-            }
-            // B-7 픽-순서 연동: 순서번호 nibble이 생존해 있으면 해당 픽 ×1.5
-            if (effectivePerk == PERK_B7 && cm.eyeRevealed
-                    && (mask & (uint16(1) << cm.eyeOrder)) != 0) {
-                pickSum += nibbleMult[cm.eyeOrder] * 5; // +0.5x = ×10 단위에서 *5
-            }
-
             // ── E 계열: pickSum 보정 (eye 배율 곱 전에 적용) ──────────
             // E-1 서로소 보너스: 4픽 전부 서로소 → 생존 픽당 +0.4x
             if (effectivePerk == PERK_E1 && _allCoprime(cm.pickedMask)) {
                 pickSum += uint32(_popcount16(mask)) * 4;
-            }
-            // E-2 소수 집중: 소수 픽 3개+ → 생존 소수 픽당 +0.5x (유지)
-            if (effectivePerk == PERK_E2) {
-                uint16 primeMask = 0x28AC; // bits: 2,3,5,7,11,13
-                if (_popcount16(cm.pickedMask & primeMask) >= 3) {
-                    pickSum += uint32(_popcount16(mask & primeMask)) * 5;
-                }
             }
             // E-3 공백 선점: 0회 nibble 3개+ → 생존 zero-nibble 픽당 +0.5x
             if (effectivePerk == PERK_E3) {
@@ -1090,12 +1021,7 @@ contract HexChain {
             if (effectivePerk == PERK_B2 && eyeSuccess && hasEmptySlot) {
                 score += 150;
             }
-            // B-6 페이크 선언 — 매치: 배수 +0.3 (B-1과 동일 방식, eyeSuccess 필수)
-            if (effectivePerk == PERK_B6 && eyeSuccess
-                    && cm.declaredOrder > 0 && cm.declaredOrder == cm.eyeOrder) {
-                score += uint64(pickSum) * 3;
-            }
-            // ── A 계열 / E-4~6: 플랫 점수 보정 (×100) ─────────────
+            // ── A 계열: 플랫 점수 보정 (×100) ─────────────
             uint16 removedMask  = cm.pickedMask & ~cm.survivingMask;
             uint8  removedCount = _popcount16(removedMask);
 
@@ -1135,20 +1061,6 @@ contract HexChain {
             if (effectivePerk == PERK_A5 && _popcount16(cm.survivingMask) <= 1) {
                 score += 100;
             }
-            // E-4 레인 선언: 픽 nibble 값 합 = 해시 첫 두 nibble 합 → +1.5pt
-            if (effectivePerk == PERK_E4) {
-                uint16 hashSum  = uint16(_getNibble(revealHash, 0)) + uint16(_getNibble(revealHash, 1));
-                uint16 pickSum16 = 0;
-                for (uint8 k = 0; k < 16; k++) {
-                    if (cm.pickedMask & (uint16(1) << k) != 0) pickSum16 += k;
-                }
-                if (pickSum16 == hashSum) score += 150;
-            }
-            // E-5 구간 분산: [0-3][4-7][8-b][c-f] 각 1개 → 생존 픽당 +0.3pt
-            if (effectivePerk == PERK_E5 && _isZoneDistributed(cm.pickedMask)) {
-                score += uint64(_popcount16(mask)) * 30;
-            }
-
             // D-3 올인: ≤1 생존 픽 + 선언 완료 시 발동
             // cm.trapNibble에 선언한 nibble+1 저장 (0=미선언)
             if (effectivePerk == PERK_D3 && cm.trapNibble > 0) {
@@ -1261,161 +1173,92 @@ contract HexChain {
     function _zoneMask(uint8 zone) internal pure returns (uint16) {
         return uint16(0xF) << ((zone - 1) * 4);
     }
-
     function _countPicksInZone(uint16 mask, uint8 zone) internal pure returns (uint8) {
         return _popcount16(mask & _zoneMask(zone));
     }
-
     function _removePicksInZone(uint16 mask, uint8 zone) internal pure returns (uint16) {
         return mask & ~_zoneMask(zone);
     }
-
     function _removeLowestNibble(uint16 mask) internal pure returns (uint16) {
         for (uint8 k = 0; k < 16; k++) {
-            if (mask & (uint16(1) << k) != 0) {
-                return mask & ~(uint16(1) << k);
-            }
+            if (mask & (uint16(1) << k) != 0) return mask & ~(uint16(1) << k);
         }
         return mask;
     }
-
-    // ─────────────────────────────────────────
-    // Internal — B-4: 최고배율 nibble 1개 희생
-    // ─────────────────────────────────────────
-
-    function _forfeitHighestPick(
-        uint16           mask,
-        uint8[16] memory nibbleMult
-    ) internal pure returns (uint16) {
-        uint8 highestMult   = 0;
-        uint8 highestNibble = 255;
+    function _forfeitHighestPick(uint16 mask, uint8[16] memory nibbleMult) internal pure returns (uint16) {
+        uint8 highestMult = 0; uint8 highestNibble = 255;
         for (uint8 k = 0; k < 16; k++) {
             if (mask & (uint16(1) << k) == 0) continue;
-            if (nibbleMult[k] > highestMult) {
-                highestMult   = nibbleMult[k];
-                highestNibble = k;
-            }
+            if (nibbleMult[k] > highestMult) { highestMult = nibbleMult[k]; highestNibble = k; }
         }
         if (highestNibble == 255) return mask;
         return mask & ~(uint16(1) << highestNibble);
     }
-
-    // ─────────────────────────────────────────
-    // Internal — 낮은 배율 nibble부터 포기
-    //   mask = nibble-value 비트마스크
-    // ─────────────────────────────────────────
-
-    function _forfeitLowestPicks(
-        uint16           mask,
-        uint8[16] memory nibbleMult,
-        uint8            forfeitCount
-    ) internal pure returns (uint16) {
+    function _forfeitLowestPicks(uint16 mask, uint8[16] memory nibbleMult, uint8 forfeitCount) internal pure returns (uint16) {
         for (uint8 f = 0; f < forfeitCount; f++) {
-            uint8 lowestMult   = 255;
-            uint8 lowestNibble = 255;
+            uint8 lowestMult = 255; uint8 lowestNibble = 255;
             for (uint8 k = 0; k < 16; k++) {
                 if (mask & (uint16(1) << k) == 0) continue;
-                if (nibbleMult[k] < lowestMult) {
-                    lowestMult   = nibbleMult[k];
-                    lowestNibble = k;
-                }
+                if (nibbleMult[k] < lowestMult) { lowestMult = nibbleMult[k]; lowestNibble = k; }
             }
             if (lowestNibble == 255) break;
             mask &= ~(uint16(1) << lowestNibble);
         }
         return mask;
     }
-
-    // ─────────────────────────────────────────
-    // Internal — nibble 배율 계산 (첫 16 nibble)
-    // ─────────────────────────────────────────
-
+    function _getNibble(bytes32 h, uint8 pos) internal pure returns (uint8) {
+        uint8 b = uint8(h[pos / 2]);
+        return (pos % 2 == 0) ? (b >> 4) : (b & 0x0f);
+    }
     function _computeNibbleMult(bytes32 h) internal pure returns (uint8[16] memory mult) {
         uint8[16] memory cnt;
-        for (uint8 pos = 0; pos < 16; pos++) {
-            cnt[_getNibble(h, pos)]++;
-        }
+        for (uint8 pos = 0; pos < 16; pos++) cnt[_getNibble(h, pos)]++;
         for (uint8 v = 0; v < 16; v++) {
             uint8 c = cnt[v];
-            if      (c == 0) mult[v] = 10; // 1.0x
-            else if (c == 1) mult[v] = 15; // 1.5x
-            else if (c == 2) mult[v] = 20; // 2.0x
-            else if (c == 3) mult[v] = 25; // 2.5x
-            else             mult[v] = 30; // 3.0x (4+회 상한)
+            if (c == 0) mult[v] = 10; else if (c == 1) mult[v] = 15;
+            else if (c == 2) mult[v] = 20; else if (c == 3) mult[v] = 25; else mult[v] = 30;
         }
     }
-
-    // ─────────────────────────────────────────
-    // Internal — 눈치게임 배수/기본점수 (×10)
-    // ─────────────────────────────────────────
-
     function _eyeMult(uint8 order) internal pure returns (uint8) {
-        if (order == 1) return 20; // 2.0x
-        if (order == 2) return 15; // 1.5x
-        return 12;                  // 1.2x (order == 3)
+        if (order == 1) return 20; if (order == 2) return 15; return 12;
     }
-
-    /// F-3 순서 함정: eyeMult 1단계 하향 (1→1.5, 2→1.2, 3→1.0)
     function _eyeMultDowngrade(uint8 order) internal pure returns (uint8) {
-        if (order == 1) return 15; // 2.0x → 1.5x
-        if (order == 2) return 12; // 1.5x → 1.2x
-        return 10;                  // 1.2x → 1.0x (order == 3)
+        if (order == 1) return 15; if (order == 2) return 12; return 10;
     }
-
     function _eyeBase(uint8 order) internal pure returns (uint8) {
-        if (order == 1) return 10; // 1.0pt
-        if (order == 2) return 7;  // 0.7pt
-        return 5;                   // 0.5pt (order == 3)
+        if (order == 1) return 10; if (order == 2) return 7; return 5;
     }
-
-    // E-1: 4픽 pairwise 서로소 검사
     function _gcd(uint8 a, uint8 b) internal pure returns (uint8) {
-        while (b != 0) { uint8 t = b; b = a % b; a = t; }
-        return a;
+        while (b != 0) { uint8 t = b; b = a % b; a = t; } return a;
     }
-
     function _allCoprime(uint16 mask) internal pure returns (bool) {
-        uint8[4] memory picks;
-        uint8 cnt = 0;
-        for (uint8 k = 0; k < 16 && cnt < 4; k++) {
+        uint8[4] memory picks; uint8 cnt = 0;
+        for (uint8 k = 0; k < 16 && cnt < 4; k++)
             if (mask & (uint16(1) << k) != 0) picks[cnt++] = k;
-        }
         if (cnt != 4) return false;
-        for (uint8 i = 0; i < 4; i++) {
-            for (uint8 j = i + 1; j < 4; j++) {
+        for (uint8 i = 0; i < 4; i++)
+            for (uint8 j = i + 1; j < 4; j++)
                 if (_gcd(picks[i], picks[j]) != 1) return false;
-            }
-        }
         return true;
     }
-
-    // E-5: [0-3][4-7][8-b][c-f] 각 구간 정확히 1개
     function _isZoneDistributed(uint16 mask) internal pure returns (bool) {
-        return (
-            _popcount16(mask & 0x000F) == 1 &&
-            _popcount16(mask & 0x00F0) == 1 &&
-            _popcount16(mask & 0x0F00) == 1 &&
-            _popcount16(mask & 0xF000) == 1
-        );
+        return (_popcount16(mask & 0x000F) == 1 && _popcount16(mask & 0x00F0) == 1 &&
+                _popcount16(mask & 0x0F00) == 1 && _popcount16(mask & 0xF000) == 1);
     }
-
-
-    /// F-2 불발 페널티: 지정 구간에서 최저배율 nibble 1개 제거
     function _removeLowestNibbleInZone(uint16 mask, uint8 zone) internal pure returns (uint16) {
-        uint16 zoneMask = _zoneMask(zone);
-        uint16 inZone = mask & zoneMask;
+        uint16 zm = _zoneMask(zone); uint16 inZone = mask & zm;
         if (inZone == 0) return mask;
-        // 최저 nibble index (값 기준 낮은 nibble = 배율 낮을 가능성 높음, 단순히 최하위 비트)
-        for (uint8 k = 0; k < 16; k++) {
+        for (uint8 k = 0; k < 16; k++)
             if (inZone & (uint16(1) << k) != 0) return mask & ~(uint16(1) << k);
-        }
         return mask;
     }
-
     function _popcount16(uint16 mask) internal pure returns (uint8 cnt) {
-        for (uint8 k = 0; k < 16; k++) {
-            if (mask & (uint16(1) << k) != 0) cnt++;
-        }
+        for (uint8 k = 0; k < 16; k++) if (mask & (uint16(1) << k) != 0) cnt++;
+    }
+    function _randomOpponentIdx(uint16 selfIdx, uint16 playerCount, bytes32 seed) internal pure returns (uint16) {
+        uint16 count = playerCount - 1;
+        uint16 rand = uint16(uint256(keccak256(abi.encodePacked(seed, selfIdx))) % count);
+        return rand < selfIdx ? rand : rand + 1;
     }
 
     /// 주소로 플레이어 인덱스 탐색. 없으면 type(uint16).max 반환.
@@ -1424,23 +1267,6 @@ contract HexChain {
             if (_players[roundId][j] == target) return j;
         }
         return type(uint16).max;
-    }
-
-    /// 자신(selfIdx)을 제외한 상대 중 랜덤 1명 인덱스 반환.
-    /// seed로 revealHash + selfIdx를 사용 (결정론적 pseudo-random).
-    function _randomOpponentIdx(
-        uint16 selfIdx,
-        uint16 playerCount,
-        bytes32 seed
-    ) internal pure returns (uint16) {
-        uint16 count = playerCount - 1; // 자신 제외
-        uint16 rand  = uint16(uint256(keccak256(abi.encodePacked(seed, selfIdx))) % count);
-        return rand < selfIdx ? rand : rand + 1;
-    }
-
-    function _getNibble(bytes32 h, uint8 pos) internal pure returns (uint8) {
-        uint8 b = uint8(h[pos / 2]);
-        return (pos % 2 == 0) ? (b >> 4) : (b & 0x0f);
     }
 
     // ─────────────────────────────────────────

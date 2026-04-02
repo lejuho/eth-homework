@@ -62,9 +62,9 @@ export const PERKS: (Perk | null)[] = [
   { id: 'b2', cat: 'b', name: '고독한 질주', str: 'mid', phase: 'p2', isNew: false, isDef: false, desc: '아무도 선택하지 않은 순서를 골랐을 때 +1.5pt.', effect: '빈 순서 발생 시 보너스 지급' },
   { id: 'b3', cat: 'd', name: '라스트 스탠드', str: 'str', phase: 'p2', isNew: false, isDef: false, desc: '픽 1개만 커밋. 성공 시 배율 ×3.0.', effect: '선언 → 픽 1개만 (공개됨)\n생존 → ×3.0 + 눈치 배수 최대\n겹침 → 0점' },
   { id: 'b4', cat: 'b', name: '선제 희생', str: 'mid', phase: 'p12', isNew: true, isDef: true, desc: '최고배율 픽 강제 포기 → 눈치게임 겹침 완전 면제.', effect: '최고배율 픽 포기 → 이번 눈치게임 겹침 면제' },
-  { id: 'b5', cat: 'b', name: '보험', str: 'wk', phase: 'p2', isNew: true, isDef: true, desc: '눈치게임 겹침 발생 시 포기 픽 수를 1개 줄여줌.', effect: '겹침 인원-1개 → 겹침 인원-2개로 완화' },
-  { id: 'c10', cat: 'c', name: '페이크 선언', str: 'mid', phase: 'p2', isNew: true, isDef: false, desc: '눈치게임 전 순서를 선언. 일치/불일치에 따라 다른 보너스.', effect: '선언 = 실제 → 배수 +0.3\n선언 ≠ 실제 → 배율 +0.2' },
-  { id: 'b7', cat: 'b', name: '픽-순서 연동', str: 'mid', phase: 'p12', isNew: true, isDef: false, desc: '눈치게임 순서 번호와 같은 hex값 픽이 생존해 있으면 해당 픽 배율 ×1.5.', effect: '눈치 2번 선택 + hex 2 생존 → 해당 픽 ×1.5' },
+  null, // perkId 11: b5 삭제됨
+  null, // perkId 12: c10 삭제됨
+  null, // perkId 13: b7 삭제됨
   // C 카테고리 (perkId 14~22, c4/c5/c6/c8 삭제)
   { id: 'c1', cat: 'c', name: '겹침 목록 열람', str: 'wk', phase: 'p2', isNew: false, isDef: false, desc: '눈치게임 시작 전 겹친 숫자 목록을 볼 수 있습니다.', effect: '공개: "겹친 숫자: 3, 7, f"\n상대 픽 간접 추론 가능' },
   { id: 'c2', cat: 'c', name: '정보 열람 (중)', str: 'mid', phase: 'p2', isNew: false, isDef: false, desc: '특정 플레이어 1명의 생존 픽 수를 확인합니다.', effect: '"A는 2개 살았다" — 어떤 픽인지는 비공개' },
@@ -82,10 +82,10 @@ export const PERKS: (Perk | null)[] = [
   { id: 'd4', cat: 'd', name: '기회주의', str: 'mid', phase: 'p2', isNew: true, isDef: false, desc: '다른 플레이어 눈치게임 포기 픽 최고배율 1개를 절반 가져옴.', effect: '타인 포기 픽 최고배율 × 0.5 점수 반영' },
   // E 카테고리 (perkId 27~32, e6 삭제)
   { id: 'e1', cat: 'e', name: '서로소 보너스', str: 'mid', phase: 'p1', isNew: false, isDef: false, desc: '4픽이 모두 서로소이면 생존 픽 전체 배율 +0.4.', effect: '[3,5,7,b] → 서로소 → +0.4' },
-  { id: 'e2', cat: 'e', name: '소수 집중', str: 'mid', phase: 'p1', isNew: false, isDef: false, desc: '소수(2,3,5,7,b,d) 3개 이상 고르면 해당 픽 배율 +0.5.', effect: '소수 6개 → 겹칠 가능성 높음' },
+  null, // perkId 28: e2 삭제됨
   { id: 'e3', cat: 'e', name: '공백 선점', str: 'mid', phase: 'p1', isNew: false, isDef: false, desc: '해시에 없는 숫자(0회)를 3개 이상 고르면 생존 공백 픽당 배율 +0.5.', effect: '0회 등장 = 기본 1.0배인데 추가 보너스' },
-  { id: 'e4', cat: 'e', name: '레인 선언', str: 'wk', phase: 'p1', isNew: false, isDef: false, desc: '픽 합이 해시 첫 두 nibble 합과 같으면 +1.5pt.', effect: '해시 a+3=13, 4픽 합 13 → +1.5pt' },
-  { id: 'e5', cat: 'e', name: '구간 분산', str: 'wk', phase: 'p1', isNew: false, isDef: false, desc: '4픽을 [0-3][4-7][8-b][c-f] 각 구간에서 1개씩 고르면 생존 픽당 +0.3pt.', effect: '선형 4구간 각 1개씩 → 생존 픽당 +0.3pt' },
+  null, // perkId 30: e4 삭제됨
+  null, // perkId 31: e5 삭제됨
   null, // perkId 32: e6 삭제됨
   // F 카테고리 (perkId 33~36, f4 삭제)
   { id: 'f1', cat: 'f', name: '숫자 함정', str: 'mid', phase: 'p1', isNew: true, isDef: false, desc: 'hex 숫자 1개를 함정으로 지정. 상대가 그 숫자를 픽했으면 상대 생존 픽 전체 배율 -0.3.', effect: '조건 일치 → 생존 픽 전체 배율 -0.3\n상대는 함정 존재는 알지만 어떤 숫자인지 모름' },
@@ -97,7 +97,7 @@ export const PERKS: (Perk | null)[] = [
   { id: 'g2', cat: 'g', name: '처형', str: 'str', phase: 'p2', isNew: true, isDef: false, desc: '눈치게임 충돌 후 처형 조건: 같은 순서에 상대 1명이면 최종 1픽 이하일 때 처형. 상대 2명이면 1명이 반드시 1픽 이하여야 하며, 나머지 1명은 2픽이어도 연쇄 처형. 성공 시 잃은 픽 배율 50% 보전 + 킬 보너스.', effect: '상대 1명 → 최종 ≤1픽 시 처형\n상대 2명 → 1명이 ≤1픽이면 2픽 상대도 연쇄 처형\n1킬 +0.5pt / 2킬 연쇄 +1.5pt\n내 잃은 픽 배율 합 × 0.5 보전' },
   { id: 'g3', cat: 'g', name: '저지불가', str: 'mid', phase: 'p12', isNew: true, isDef: true, desc: '상대 특전이 나에게 미치는 모든 효과를 무효화. 단, 내 공격적 특전도 발동 불가.', effect: '정보 열람 · 함정 · 봉쇄 전부 차단\n내 공격 특전도 동시에 봉인' },
   { id: 'g4', cat: 'g', name: '강제 교환', str: 'mid', phase: 'p2', isNew: true, isDef: false, desc: '상대 생존 픽 1개와 내 픽 1개를 강제 교환.', effect: '상대 고배율 픽과 내 저배율 픽 교환' },
-  { id: 'g5', cat: 'g', name: '순서 선점', str: 'mid', phase: 'p2', isNew: true, isDef: false, desc: '특정 순서를 선점 선언. 동일 순서를 선택한 상대가 있으면 그 상대가 다음 빈 순서로 밀려남.', effect: '선언 자체가 공개 → 상대가 알고 피할 수 있음' },
+  null, // perkId 41: g5 삭제됨
   { id: 'g6', cat: 'g', name: '편승', str: 'mid', phase: 'p2', isNew: true, isDef: false, desc: '내가 눈치게임에 단독 성공하면, 내 배수 대신 상대 1명의 배수를 사용. 상대가 G3이면 무효.', effect: '내 3번(×1.2) 단독 성공 + 상대 1번(×2.0) → 내 배수 ×2.0으로 교체\n내 성공 여부는 내 순서 기준, 배수만 교체' },
   null, // perkId 43: g7 삭제됨
   // B 카테고리 추가 (perkId 44)

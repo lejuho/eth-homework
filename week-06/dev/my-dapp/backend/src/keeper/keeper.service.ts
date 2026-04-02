@@ -5,16 +5,18 @@ import { EyeRevealService } from '../eye-reveal/eye-reveal.service'
 import { DebugService } from '../debug/debug.service'
 
 /**
+ * 수정용 의미없는 문장
  * KeeperService v6 (client-side ZK)
  *
  * 상태 전환:
  *   OPEN(0)       → LOCKED(1)     : block > revealBlock, playerCount >= 2 → lockRound()
  *   OPEN(0)       → SETTLED(4)    : block > lockBlock,  playerCount < 2   → expireRound()
- *   LOCKED(1)                     : block <= revealBlock + RW  → revealFor() (stored proof)
  *   LOCKED(1)     → EYE_OPEN(2)   : block > revealBlock + RW  → openEyeGame()
  *   EYE_OPEN(2)   → EYE_LOCKED(3) : block > eyeRevealBlock    → lockEyeRound()
  *   EYE_LOCKED(3)                 : block <= eyeRevealBlock + ERW → eyeRevealFor()
  *   EYE_LOCKED(3) → SETTLED(4)    : block > eyeRevealBlock + ERW → settle()
+ *
+ *   LOCKED(1): 유저가 직접 RevealForm에서 ZK proof 생성 후 revealFor 호출 (keeper 개입 없음)
  */
 @Injectable()
 export class KeeperService {
