@@ -684,7 +684,7 @@ export default function Home() {
                 {hasCommitted && !hasEyeRevealed ? (
                   <EyeRevealForm roundId={activeRoundId} onSuccess={refetchAll} />
                 ) : hasEyeRevealed ? (
-                  <StatusHint color="amber" text="✓ Eye Revealed — settle을 기다리는 중" />
+                  <StatusHint color="amber" text="✓ Seq Revealed — settle을 기다리는 중" />
                 ) : (
                   <StatusHint color="" text="이번 라운드에 참여하지 않았습니다" />
                 )}

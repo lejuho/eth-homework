@@ -23,11 +23,15 @@ deploy_no_args() {
   bytecode="$(forge inspect "${contract}" bytecode 2>/dev/null)"
 
   local receipt
-  receipt="$(cast send \
+  if ! receipt="$(cast send \
     --rpc-url "$RPC_URL" \
     --private-key "$PRIVATE_KEY" \
     --create "$bytecode" \
-    --json 2>&1)"
+    --json 2>/tmp/cast_err)"; then
+    echo "  ERROR: cast send failed for ${label}" >&2
+    cat /tmp/cast_err >&2
+    exit 1
+  fi
 
   local address
   address="$(printf '%s' "$receipt" | python3 -c "import sys,json; print(json.load(sys.stdin)['contractAddress'])")"
@@ -49,11 +53,15 @@ deploy_with_args() {
   encoded_args="$(cast abi-encode "${constructor_sig}" "$@" 2>/dev/null | sed 's/^0x//')"
 
   local receipt
-  receipt="$(cast send \
+  if ! receipt="$(cast send \
     --rpc-url "$RPC_URL" \
     --private-key "$PRIVATE_KEY" \
     --create "${bytecode}${encoded_args}" \
-    --json 2>&1)"
+    --json 2>/tmp/cast_err)"; then
+    echo "  ERROR: cast send failed for ${label}" >&2
+    cat /tmp/cast_err >&2
+    exit 1
+  fi
 
   local address
   address="$(printf '%s' "$receipt" | python3 -c "import sys,json; print(json.load(sys.stdin)['contractAddress'])")"

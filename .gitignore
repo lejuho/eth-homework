@@ -24,3 +24,13 @@ node_modules/
 
 # npm
 # package-lock.json — CI에서 필요하므로 추적
+
+# Next.js 빌드
+week-06/dev/my-dapp/frontend/.next/
+
+# NestJS 빌드
+week-06/dev/my-dapp/backend/dist/
+
+# 실제 env (example만 커밋)
+week-06/dev/my-dapp/frontend/.env.local
+week-06/dev/my-dapp/backend/.env

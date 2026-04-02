@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common'
 import { Cron } from '@nestjs/schedule'
 import { ChainService } from '../chain/chain.service'
 import { EyeRevealService } from '../eye-reveal/eye-reveal.service'
-import { ProofService } from '../proof/proof.service'
 import { DebugService } from '../debug/debug.service'
 
 /**
@@ -27,8 +26,7 @@ export class KeeperService {
   constructor(
     private readonly chain:      ChainService,
     private readonly eyeReveals: EyeRevealService,
-    private readonly proofs:     ProofService,
-    private readonly debug:      DebugService,
+private readonly debug:      DebugService,
   ) {}
 
   private log(msg: string)  { this.logger.log(msg);  this.debug.push('log',   msg) }
@@ -116,39 +114,7 @@ export class KeeperService {
       return
     }
 
-    // ── LOCKED: stored proof → revealFor (offline fallback) ─────────────
-    if (info.state === 1 && block <= info.revealBlock + rw) {
-      const entries = this.proofs.listRound(roundId.toString())
-      this.log(`[Round ${roundId}] LOCKED — 저장된 proof: ${entries.length}개 (block=${block} revealBlock=${info.revealBlock} rw=${rw})`)
-      for (const entry of entries) {
-        try {
-          const playerInfo = await this.chain.getPlayerInfo(roundId, entry.address as `0x${string}`)
-          if (playerInfo.revealed) {
-            this.log(`[Round ${roundId}] revealFor ${entry.address}: 이미 리빌됨, skip`)
-            continue
-          }
-
-          const { pA, pB, pC, pubSignals } = entry.proof
-          this.log(`[Round ${roundId}] revealFor ${entry.address} 호출 중...`)
-
-          const hash = await this.chain.revealFor(
-            roundId,
-            entry.address as `0x${string}`,
-            pA.map(BigInt) as [bigint, bigint],
-            pB.map(r => r.map(BigInt)) as [[bigint, bigint], [bigint, bigint]],
-            pC.map(BigInt) as [bigint, bigint],
-            pubSignals.map(BigInt) as [bigint, bigint],
-          )
-          await this.chain.waitForReceipt(hash)
-          this.log(`[Round ${roundId}] revealFor ${entry.address} 완료: ${hash}`)
-        } catch (err) {
-          const message = (err as Error).message
-          if (!message.includes('AlreadyRevealed')) {
-            this.warn(`[Round ${roundId}] revealFor ${entry.address} 실패: ${message}`)
-          }
-        }
-      }
-    }
+    // ── LOCKED: 유저가 직접 RevealForm으로 reveal — keeper 개입 없음 ──────
 
     // ── LOCKED → EYE_OPEN ───────────────────────────────────────────────
     if (info.state === 1 && block > info.revealBlock + rw) {
