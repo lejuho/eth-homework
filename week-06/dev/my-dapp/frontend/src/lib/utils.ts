@@ -16,7 +16,7 @@ export function formatEth(wei: bigint): string {
 }
 
 // 0=OPEN, 1=LOCKED, 2=EYE_OPEN, 3=EYE_LOCKED, 4=SETTLED
-export const ROUND_STATE_LABEL = ['OPEN', 'LOCKED', 'EYE_OPEN', 'EYE_LOCKED', 'SETTLED'] as const
+export const ROUND_STATE_LABEL = ['OPEN', 'LOCKED', 'SEQ_OPEN', 'SEQ_LOCKED', 'SETTLED'] as const
 
 export const HEX_LABELS = [
   '0', '1', '2', '3', '4', '5', '6', '7',
@@ -47,13 +47,32 @@ export function computeNibbleMult(hash: `0x${string}`): number[] {
   })
 }
 
-// localStorage 키
-export const commitStorageKey    = (roundId: bigint) => `hexchain_commit_${roundId.toString()}`
-export const eyeCommitStorageKey = (roundId: bigint) => `hexchain_eyecommit_${roundId.toString()}`
+// localStorage 키 — 컨트랙트 주소 포함으로 재배포 시 자동 격리
+const _contract = (process.env.NEXT_PUBLIC_HEXCHAIN_ADDRESS ?? '0x0').slice(2, 10)
+export const commitStorageKey    = (roundId: bigint) => `hexchain_commit_${_contract}_${roundId.toString()}`
+export const eyeCommitStorageKey = (roundId: bigint) => `hexchain_eyecommit_${_contract}_${roundId.toString()}`
+export const proofStorageKey     = (roundId: bigint) => `hexchain_proof_${_contract}_${roundId.toString()}`
+export const d2ExtraStorageKey   = (roundId: bigint) => `hexchain_d2extra_${_contract}_${roundId.toString()}`
+export const d3AllinStorageKey   = (roundId: bigint) => `hexchain_d3allin_${_contract}_${roundId.toString()}`
+
+/** 앱 시작 시 한 번 호출 — 현재 컨트랙트와 다른 hexchain_* 키 전부 삭제 */
+export function cleanStaleStorage() {
+  if (typeof window === 'undefined') return
+  const toDelete: string[] = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (!key?.startsWith('hexchain_')) continue
+    if (!key.includes(`_${_contract}_`)) toDelete.push(key)
+  }
+  toDelete.forEach(k => localStorage.removeItem(k))
+  if (toDelete.length > 0)
+    console.log(`[storage] 구버전 키 ${toDelete.length}개 삭제 (contract=${_contract})`)
+}
 
 export interface CommitData {
   choices: number[]
   salt: `0x${string}`
+  perkId: number   // 0=없음, 1~N=PERKS 인덱스+1
 }
 
 export interface EyeCommitData {

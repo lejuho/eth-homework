@@ -9,6 +9,7 @@ export interface SettledData {
   myRank: 1 | 2 | 3 | null
   committedCount: number
   revealedCount: number
+  cancelled?: boolean   // expireRound / cancelRound으로 종료된 경우
 }
 
 /** null = 로딩 중, false = 로드 완료(이벤트 없음), SettledData = 정상 */
@@ -49,8 +50,29 @@ export function useSettledResults(roundId: bigint | undefined, isSettled: boolea
         fromBlock: 0n,
         toBlock: 'latest',
       }),
+      publicClient.getLogs({
+        address: CONTRACT_ADDRESS,
+        event: parseAbiItem(
+          'event RoundCancelled(uint256 indexed roundId, address indexed by)',
+        ),
+        args: { roundId },
+        fromBlock: 0n,
+        toBlock: 'latest',
+      }),
     ])
-      .then(([settledLogs, committedLogs, revealedLogs]) => {
+      .then(([settledLogs, committedLogs, revealedLogs, cancelledLogs]) => {
+        // 취소된 라운드 (인원 부족 or 방장 취소)
+        if (settledLogs.length === 0 && cancelledLogs.length > 0) {
+          setData({
+            top3: ['0x0000000000000000000000000000000000000000', '0x0000000000000000000000000000000000000000', '0x0000000000000000000000000000000000000000'],
+            scores: [0n, 0n, 0n],
+            myRank: null,
+            committedCount: committedLogs.length,
+            revealedCount: 0,
+            cancelled: true,
+          })
+          return
+        }
         if (settledLogs.length === 0) {
           setData(false)
           return

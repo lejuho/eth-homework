@@ -1,41 +1,73 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId } from 'wagmi'
 import { hexChainContract } from '@/lib/config'
-import { generateSalt, HEX_LABELS } from '@/lib/utils'
+import { generateSalt, HEX_LABELS, computeNibbleMult } from '@/lib/utils'
 import { buildCommitHash } from '@/lib/poseidon'
 import { useLocalCommit } from '@/hooks/useLocalCommit'
+import { perkStringToId } from '@/lib/perks'
 import type { Perk } from '@/lib/perks'
+import { flog } from '@/lib/flog'
 
-const ENTRY_FEE = 1_000_000_000_000_000n // 0.001 ETH
-
-// 배율 클래스 — 실제 revealHash 없을 때 기본값 m10
 const MULT_CLS = ['m10', 'm15', 'm20', 'm25', 'm30'] as const
 type MultCls = typeof MULT_CLS[number]
 
-// 배율 인덱스 → CSS 클래스 + 레이블
-function multClass(_hex: number): MultCls { return 'm10' } // TODO: revealHash 기반 계산
-function multLabel(_hex: number): string  { return '1.0x' }
+function multClassFromVal(v: number): MultCls {
+  if (v >= 30) return 'm30'
+  if (v >= 25) return 'm25'
+  if (v >= 20) return 'm20'
+  if (v >= 15) return 'm15'
+  return 'm10'
+}
+function multLabelFromVal(v: number): string {
+  return (v / 10).toFixed(1) + '×'
+}
 
 interface Props {
   roundId: bigint
+  revealHash: `0x${string}`
   equippedPerk: Perk | null
-  onOpenPerks: () => void
+  hideMultipliers?: boolean
+  blocksToLock?: bigint
   onSuccess: () => void
 }
 
-export function CommitForm({ roundId, equippedPerk, onOpenPerks, onSuccess }: Props) {
+function useBlockCountdown(blocksToLock: bigint | undefined): string | null {
+  const chainId = useChainId()
+  const blockSec = (chainId === 31337 || chainId === 84532) ? 2 : 12
+  const [secsLeft, setSecsLeft] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (blocksToLock === undefined || blocksToLock <= 0n) { setSecsLeft(null); return }
+    const total = Number(blocksToLock) * blockSec
+    setSecsLeft(total)
+    const id = setInterval(() => setSecsLeft(s => (s !== null && s > 0 ? s - 1 : 0)), 1000)
+    return () => clearInterval(id)
+  }, [blocksToLock, blockSec])
+
+  if (secsLeft === null || secsLeft <= 0) return null
+  if (secsLeft >= 60) return `약 ${Math.ceil(secsLeft / 60)}분`
+  return `${secsLeft}초`
+}
+
+export function CommitForm({ roundId, revealHash, equippedPerk, hideMultipliers = false, blocksToLock, onSuccess }: Props) {
+  const timeLeft = useBlockCountdown(blocksToLock)
+  const nibbleMult = computeNibbleMult(revealHash)
   const [selected, setSelected] = useState<number[]>([])
   const [isBuilding, setIsBuilding] = useState(false)
   const { saveCommit } = useLocalCommit(roundId)
+  const { address } = useAccount()
 
   const [isDone, setIsDone] = useState(false)
   const { writeContract, data: hash, isPending, error, reset } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
 
   useEffect(() => {
-    if (isSuccess) { setIsDone(true); onSuccess() }
+    if (!isSuccess) return
+    flog(`[CommitForm] TX 확인 완료 — round=${roundId}`)
+    setIsDone(true)
+    onSuccess()
   }, [isSuccess]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isDone) return null
@@ -51,13 +83,16 @@ export function CommitForm({ roundId, equippedPerk, onOpenPerks, onSuccess }: Pr
     setIsBuilding(true)
     try {
       const salt = generateSalt()
-      const commitHash = buildCommitHash(selected, BigInt(salt))
-      await saveCommit({ choices: selected, salt })
+      const saltBigInt = BigInt(salt)
+      const commitHash = buildCommitHash(selected, saltBigInt)
+      const perkId = perkStringToId(equippedPerk?.id)
+      saveCommit({ choices: selected, salt, perkId })
+      if (!address) throw new Error('지갑 연결이 필요합니다')
+      flog(`[CommitForm] commit 제출 — round=${roundId} addr=${address.slice(0,8)}`)
       writeContract({
         ...hexChainContract,
         functionName: 'commit',
-        args: [roundId, commitHash],
-        value: ENTRY_FEE,
+        args: [roundId, commitHash, perkId],
       })
     } finally {
       setIsBuilding(false)
@@ -68,6 +103,15 @@ export function CommitForm({ roundId, equippedPerk, onOpenPerks, onSuccess }: Pr
 
   return (
     <>
+      {/* 남은 블록 */}
+      {blocksToLock !== undefined && blocksToLock > 0n && (
+        <div style={{ margin: '12px 20px 0', padding: '8px 12px', borderRadius: 10, background: blocksToLock <= 3n ? 'rgba(239,68,68,.1)' : 'rgba(99,102,241,.1)', border: `1px solid ${blocksToLock <= 3n ? 'rgba(239,68,68,.3)' : 'rgba(99,102,241,.25)'}`, fontSize: 12, color: 'var(--muted)', textAlign: 'center' }}>
+          ⏱ 커밋 마감까지{' '}
+          <span style={{ color: blocksToLock <= 3n ? '#f87171' : '#a5b4fc', fontWeight: 600 }}>{Number(blocksToLock)}블록</span>
+          {timeLeft && <span style={{ color: 'var(--muted)', marginLeft: 4 }}>({timeLeft})</span>}
+          {' '}남음
+        </div>
+      )}
       {/* 배율 보드 */}
       <div className="hx-sec" style={{ marginTop: 22 }}>
         배율 보드 <span style={{ fontFamily: 'var(--sans)', textTransform: 'none', letterSpacing: 0, fontSize: 10 }}>— 블록 해시 기준</span>
@@ -77,7 +121,7 @@ export function CommitForm({ roundId, equippedPerk, onOpenPerks, onSuccess }: Pr
           const order = selected.indexOf(i)
           const isSelected = order !== -1
           const isDisabled = !isSelected && selected.length >= 4
-          const cls = multClass(i)
+          const cls = multClassFromVal(nibbleMult[i])
 
           return (
             <div
@@ -86,10 +130,10 @@ export function CommitForm({ roundId, equippedPerk, onOpenPerks, onSuccess }: Pr
               tabIndex={0}
               onClick={() => !isDisabled && toggle(i)}
               onKeyDown={e => e.key === 'Enter' && !isDisabled && toggle(i)}
-              className={`hx-mb-cell ${cls}${isSelected ? ' selected' : ''}${isDisabled ? ' disabled' : ''}`}
+              className={`hx-mb-cell ${cls}${isSelected ? ' selected' : ''}${isDisabled ? ' disabled' : ''}${hideMultipliers && !isSelected ? ' fog' : ''}`}
             >
               <div className="hv">{label}</div>
-              <div className="mv">{mutLabel(i, isSelected, order)}</div>
+              <div className="mv">{hideMultipliers && !isSelected ? '?' : mutLabel(nibbleMult[i], isSelected, order)}</div>
             </div>
           )
         })}
@@ -113,32 +157,23 @@ export function CommitForm({ roundId, equippedPerk, onOpenPerks, onSuccess }: Pr
           const filled = v !== undefined
           return (
             <div key={i} className={`hx-pick-slot${filled ? ' filled' : ''}`}>
-              {filled ? HEX_LABELS[v] : '?'}
+              {filled ? HEX_LABELS[v] : <span style={{ fontSize: 22, opacity: 0.3 }}>·</span>}
+              <span className="slot-order">{i + 1}번째</span>
             </div>
           )
         })}
       </div>
 
-      {/* 특전 슬롯 */}
-      <div className="hx-sec" style={{ marginTop: 16 }}>
-        보유 특전
-        <span style={{ fontFamily: 'var(--sans)', textTransform: 'none', letterSpacing: 0, fontSize: 10, fontWeight: 400 }}>
-          &nbsp;— 게임당 1개
-        </span>
-      </div>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onOpenPerks}
-        onKeyDown={e => e.key === 'Enter' && onOpenPerks()}
-        className={`hx-perk-slot${!equippedPerk ? ' empty' : ''}`}
-      >
-        <div>
-          <div className="pn">{equippedPerk ? equippedPerk.name : '특전 없음'}</div>
-          <div className="ph">{equippedPerk ? equippedPerk.desc.slice(0, 40) + '…' : '탭해서 특전 장착'}</div>
-        </div>
-        <div style={{ color: 'var(--muted)', fontSize: 18 }}>＋</div>
-      </div>
+      {/* 장착된 특전 표시 */}
+      {equippedPerk && (
+        <>
+          <div className="hx-sec" style={{ marginTop: 16 }}>장착된 특전</div>
+          <div className="hx-perk-slot" style={{ cursor: 'default', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+            <div className="pn">{equippedPerk.name}</div>
+            <div className="ph" style={{ fontSize: 11, lineHeight: 1.5, whiteSpace: 'normal' }}>{equippedPerk.desc}</div>
+          </div>
+        </>
+      )}
 
       {/* 커밋 버튼 */}
       <div style={{ height: 16 }} />
@@ -161,7 +196,7 @@ export function CommitForm({ roundId, equippedPerk, onOpenPerks, onSuccess }: Pr
 }
 
 // 선택 순서 또는 배율 표시
-function mutLabel(i: number, isSelected: boolean, order: number): string {
+function mutLabel(mult: number, isSelected: boolean, order: number): string {
   if (isSelected) return `#${order + 1}`
-  return multLabel(i)
+  return multLabelFromVal(mult)
 }

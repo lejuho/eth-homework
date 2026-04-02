@@ -9,16 +9,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.KeeperModule = void 0;
 const common_1 = require("@nestjs/common");
 const chain_module_1 = require("../chain/chain.module");
-const commit_module_1 = require("../commit/commit.module");
 const eye_reveal_module_1 = require("../eye-reveal/eye-reveal.module");
-const zk_module_1 = require("../zk/zk.module");
+const proof_module_1 = require("../proof/proof.module");
 const keeper_service_1 = require("./keeper.service");
 let KeeperModule = class KeeperModule {
 };
 exports.KeeperModule = KeeperModule;
 exports.KeeperModule = KeeperModule = __decorate([
     (0, common_1.Module)({
-        imports: [chain_module_1.ChainModule, commit_module_1.CommitModule, eye_reveal_module_1.EyeRevealModule, zk_module_1.ZkModule],
+        imports: [chain_module_1.ChainModule, eye_reveal_module_1.EyeRevealModule, proof_module_1.ProofModule],
         providers: [keeper_service_1.KeeperService],
     })
 ], KeeperModule);

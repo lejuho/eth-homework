@@ -4,6 +4,7 @@ import { ConnectButton } from '@rainbow-me/rainbowkit'
 
 interface Props {
   state: number  // -1=없음, 0=OPEN, 1=LOCKED, 2=EYE_OPEN, 3=EYE_LOCKED, 4=SETTLED
+  onPerksClick?: () => void
 }
 
 const CHIP_CONFIG: Record<number, { label: string; cls: string }> = {
@@ -14,7 +15,7 @@ const CHIP_CONFIG: Record<number, { label: string; cls: string }> = {
   4: { label: '● 종료',     cls: 'ended' },
 }
 
-export function Header({ state }: Props) {
+export function Header({ state, onPerksClick }: Props) {
   const chip = CHIP_CONFIG[state]
 
   return (
@@ -27,6 +28,24 @@ export function Header({ state }: Props) {
           <div className={`hx-chip ${chip.cls}`}>
             {chip.label}
           </div>
+        )}
+        {onPerksClick && (
+          <button
+            onClick={onPerksClick}
+            style={{
+              width: 34, height: 34,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: 10,
+              background: 'rgba(139,92,246,.15)',
+              border: '1px solid rgba(139,92,246,.3)',
+              cursor: 'pointer',
+              fontSize: 17,
+              flexShrink: 0,
+            }}
+            title="특전집"
+          >
+            🎴
+          </button>
         )}
         <ConnectButton
           chainStatus="none"

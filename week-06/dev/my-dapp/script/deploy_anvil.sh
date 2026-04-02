@@ -5,6 +5,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+# Base Sepolia 배포 예시:
+#   RPC_URL=https://sepolia.base.org PRIVATE_KEY=0x... ./script/deploy_anvil.sh
 RPC_URL="${RPC_URL:-http://localhost:8545}"
 PRIVATE_KEY="${PRIVATE_KEY:-0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}"
 
@@ -25,7 +27,7 @@ deploy_no_args() {
     --rpc-url "$RPC_URL" \
     --private-key "$PRIVATE_KEY" \
     --create "$bytecode" \
-    --json 2>/dev/null)"
+    --json 2>&1)"
 
   local address
   address="$(printf '%s' "$receipt" | python3 -c "import sys,json; print(json.load(sys.stdin)['contractAddress'])")"
@@ -51,7 +53,7 @@ deploy_with_args() {
     --rpc-url "$RPC_URL" \
     --private-key "$PRIVATE_KEY" \
     --create "${bytecode}${encoded_args}" \
-    --json 2>/dev/null)"
+    --json 2>&1)"
 
   local address
   address="$(printf '%s' "$receipt" | python3 -c "import sys,json; print(json.load(sys.stdin)['contractAddress'])")"
@@ -71,13 +73,47 @@ HEXCHAIN_ADDRESS="$(deploy_with_args \
   "constructor(address)" \
   "$VERIFIER_ADDRESS")"
 
+# ── 3. HexChainRegistry ───────────────────────────────────────────────────────
+REGISTRY_ADDRESS="$(deploy_with_args \
+  "HexChainRegistry" \
+  "contracts/HexChainRegistry.sol:HexChainRegistry" \
+  "constructor(address)" \
+  "$HEXCHAIN_ADDRESS")"
+
+# ── 4. .env 자동 업데이트 ─────────────────────────────────────────────────────
+BACKEND_ENV="$ROOT_DIR/backend/.env"
+FRONTEND_ENV="$ROOT_DIR/frontend/.env.local"
+
+update_env() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+  if [ -f "$file" ]; then
+    if grep -q "^${key}=" "$file"; then
+      sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+    else
+      echo "${key}=${value}" >> "$file"
+    fi
+    echo "  Updated ${file##*/}: ${key}=${value}" >&2
+  else
+    echo "  Skipped (not found): $file" >&2
+  fi
+}
+
+echo "==> Updating env files" >&2
+update_env "$BACKEND_ENV"  "CONTRACT_ADDRESS"               "$HEXCHAIN_ADDRESS"
+update_env "$BACKEND_ENV"  "REGISTRY_ADDRESS"               "$REGISTRY_ADDRESS"
+update_env "$FRONTEND_ENV" "NEXT_PUBLIC_HEXCHAIN_ADDRESS"   "$HEXCHAIN_ADDRESS"
+update_env "$FRONTEND_ENV" "NEXT_PUBLIC_REGISTRY_ADDRESS"   "$REGISTRY_ADDRESS"
+
 cat <<EOF
 
 === Deployment summary ===
   RevealVerifier (Groth16) : $VERIFIER_ADDRESS
   HexChain                 : $HEXCHAIN_ADDRESS
+  HexChainRegistry         : $REGISTRY_ADDRESS
 
-=== Env values ===
-  NEXT_PUBLIC_HEXCHAIN_ADDRESS=$HEXCHAIN_ADDRESS
-  CONTRACT_ADDRESS=$HEXCHAIN_ADDRESS
+=== Env files updated ===
+  backend/.env
+  frontend/.env.local
 EOF

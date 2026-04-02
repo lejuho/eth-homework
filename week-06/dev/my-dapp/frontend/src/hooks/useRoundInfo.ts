@@ -29,14 +29,14 @@ export function useRoundInfo(roundId: bigint | undefined) {
   const [
     state, startBlock, lockBlock, revealBlock,
     eyeLockBlock, eyeRevealBlock,
-    playerCount, prizePool, revealHash,
+    playerCount, revealHash,
   ] = data
 
   return {
     roundInfo: {
       state, startBlock, lockBlock, revealBlock,
       eyeLockBlock, eyeRevealBlock,
-      playerCount, prizePool, revealHash,
+      playerCount, revealHash,
     },
     blockNumber,
     refetch,

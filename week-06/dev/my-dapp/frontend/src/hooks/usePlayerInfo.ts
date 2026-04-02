@@ -16,10 +16,10 @@ export function usePlayerInfo(roundId: bigint | undefined) {
 
   if (!data) return { playerInfo: null, refetch }
 
-  const [hasCommitted, revealed, eyeRevealed, eyeOrder, survivingMask, score] = data
+  const [hasCommitted, revealed, eyeRevealed, eyeOrder, perkId, survivingMask, score, declaredOrder] = data
 
   return {
-    playerInfo: { hasCommitted, revealed, eyeRevealed, eyeOrder, survivingMask, score },
+    playerInfo: { hasCommitted, revealed, eyeRevealed, eyeOrder, perkId: Number(perkId), survivingMask, score, declaredOrder: Number(declaredOrder) },
     refetch,
   }
 }

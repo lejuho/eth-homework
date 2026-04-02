@@ -41,7 +41,7 @@ const PHASES = [
   },
 ]
 
-const STEPS = ['Commit', 'Reveal', 'Eye Commit', 'Eye Reveal', 'Settled']
+const STEPS = ['Commit', 'Reveal', 'Seq Commit', 'Seq Reveal', 'Settled']
 
 // 현재 단계 인덱스를 STEPS 기준으로 매핑 (state === step index)
 export function PhaseGuide({ state, hasCommitted, hasRevealed, hasEyeRevealed }: Props) {
@@ -104,7 +104,7 @@ export function PhaseGuide({ state, hasCommitted, hasRevealed, hasEyeRevealed }:
         )}
         {state >= 3 && (
           <span className={hasEyeRevealed ? 'text-green-400' : 'text-gray-600'}>
-            {hasEyeRevealed ? '✓ Eye Revealed' : '○ Eye not revealed'}
+            {hasEyeRevealed ? '✓ Seq Revealed' : '○ Seq not revealed'}
           </span>
         )}
       </div>

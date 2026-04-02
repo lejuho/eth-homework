@@ -1,19 +1,20 @@
-export const HEXCHAIN_ABI = [
-  { type: 'receive', stateMutability: 'payable' },
+export const REGISTRY_ABI = [
+  { type: 'function', name: 'getOpenRounds', inputs: [], outputs: [{ name: '', type: 'uint256[]' }], stateMutability: 'view' },
+  { type: 'function', name: 'isOpen', inputs: [{ name: 'roundId', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }], stateMutability: 'view' },
+  { type: 'function', name: 'register', inputs: [{ name: 'roundId', type: 'uint256' }], outputs: [], stateMutability: 'nonpayable' },
+  { type: 'function', name: 'unregister', inputs: [{ name: 'roundId', type: 'uint256' }], outputs: [], stateMutability: 'nonpayable' },
+] as const
 
+export const HEXCHAIN_ABI = [
   // ── Constants ──────────────────────────────
   { type: 'function', name: 'BLOCKHASH_LIMIT',    inputs: [], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' },
   { type: 'function', name: 'CHOICES_COUNT',      inputs: [], outputs: [{ name: '', type: 'uint8' }],   stateMutability: 'view' },
   { type: 'function', name: 'COMMIT_WINDOW',      inputs: [], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' },
-  { type: 'function', name: 'ENTRY_FEE',          inputs: [], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' },
   { type: 'function', name: 'LOCK_OFFSET',        inputs: [], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' },
   { type: 'function', name: 'MAX_PLAYERS',        inputs: [], outputs: [{ name: '', type: 'uint8' }],   stateMutability: 'view' },
   { type: 'function', name: 'REVEAL_WINDOW',      inputs: [], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' },
   { type: 'function', name: 'EYE_COMMIT_WINDOW',  inputs: [], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' },
   { type: 'function', name: 'EYE_REVEAL_WINDOW',  inputs: [], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' },
-  { type: 'function', name: 'PRIZE_SHARE_1',      inputs: [], outputs: [{ name: '', type: 'uint8' }],   stateMutability: 'view' },
-  { type: 'function', name: 'PRIZE_SHARE_2',      inputs: [], outputs: [{ name: '', type: 'uint8' }],   stateMutability: 'view' },
-  { type: 'function', name: 'PRIZE_SHARE_3',      inputs: [], outputs: [{ name: '', type: 'uint8' }],   stateMutability: 'view' },
 
   // ── State ───────────────────────────────────
   { type: 'function', name: 'currentRoundId', inputs: [], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' },
@@ -26,6 +27,12 @@ export const HEXCHAIN_ABI = [
       { name: 'pickedMask',    type: 'uint16' },
       { name: 'survivingMask', type: 'uint16' },
       { name: 'eyeOrder',      type: 'uint8' },
+      { name: 'perkId',        type: 'uint8' },
+      { name: 'declaredOrder', type: 'uint8' },
+      { name: 'trapOrder',     type: 'uint8' },
+      { name: 'trapNibble',    type: 'uint8' },
+      { name: 'trapZone',      type: 'uint8' },
+      { name: 'targetPlayer',  type: 'address' },
       { name: 'revealed',      type: 'bool' },
       { name: 'eyeRevealed',   type: 'bool' },
       { name: 'score',         type: 'uint64' },
@@ -44,7 +51,6 @@ export const HEXCHAIN_ABI = [
       { name: 'eyeRevealBlock',type: 'uint64' },
       { name: 'playerCount',   type: 'uint16' },
       { name: 'state',         type: 'uint8' },
-      { name: 'prizePool',     type: 'uint256' },
     ],
     stateMutability: 'view',
   },
@@ -59,12 +65,35 @@ export const HEXCHAIN_ABI = [
     inputs: [
       { name: 'roundId',    type: 'uint256' },
       { name: 'commitHash', type: 'uint256' },
+      { name: 'perkId',     type: 'uint8' },
     ],
-    outputs: [], stateMutability: 'payable',
+    outputs: [], stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function', name: 'cancelRound',
+    inputs: [{ name: 'roundId', type: 'uint256' }],
+    outputs: [], stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function', name: 'expireRound',
+    inputs: [{ name: 'roundId', type: 'uint256' }],
+    outputs: [], stateMutability: 'nonpayable',
   },
   {
     type: 'function', name: 'lockRound',
     inputs: [{ name: 'roundId', type: 'uint256' }],
+    outputs: [], stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function', name: 'revealFor',
+    inputs: [
+      { name: 'roundId', type: 'uint256' },
+      { name: 'player',  type: 'address' },
+      { name: 'pA',         type: 'uint256[2]' },
+      { name: 'pB',         type: 'uint256[2][2]' },
+      { name: 'pC',         type: 'uint256[2]' },
+      { name: 'pubSignals', type: 'uint256[2]' },
+    ],
     outputs: [], stateMutability: 'nonpayable',
   },
   {
@@ -77,6 +106,23 @@ export const HEXCHAIN_ABI = [
     inputs: [
       { name: 'roundId',       type: 'uint256' },
       { name: 'eyeCommitHash', type: 'bytes32' },
+    ],
+    outputs: [], stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function', name: 'declareForReveal',
+    inputs: [
+      { name: 'roundId',       type: 'uint256' },
+      { name: 'declaredOrder', type: 'uint8' },
+    ],
+    outputs: [], stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function', name: 'eyeCommitWithDeclaration',
+    inputs: [
+      { name: 'roundId',       type: 'uint256' },
+      { name: 'eyeCommitHash', type: 'bytes32' },
+      { name: 'declaredOrder', type: 'uint8' },
     ],
     outputs: [], stateMutability: 'nonpayable',
   },
@@ -112,7 +158,6 @@ export const HEXCHAIN_ABI = [
       { name: 'eyeLockBlock',  type: 'uint64' },
       { name: 'eyeRevealBlock',type: 'uint64' },
       { name: 'playerCount',   type: 'uint16' },
-      { name: 'prizePool',     type: 'uint256' },
       { name: 'revealHash',    type: 'bytes32' },
     ],
     stateMutability: 'view',
@@ -124,12 +169,14 @@ export const HEXCHAIN_ABI = [
       { name: 'player',  type: 'address' },
     ],
     outputs: [
-      { name: 'hasCommitted',  type: 'bool' },
-      { name: 'revealed',      type: 'bool' },
-      { name: 'eyeRevealed',   type: 'bool' },
-      { name: 'eyeOrder',      type: 'uint8' },
-      { name: 'survivingMask', type: 'uint16' },
-      { name: 'score',         type: 'uint64' },
+      { name: 'hasCommitted',   type: 'bool' },
+      { name: 'revealed',       type: 'bool' },
+      { name: 'eyeRevealed',    type: 'bool' },
+      { name: 'eyeOrder',       type: 'uint8' },
+      { name: 'perkId',         type: 'uint8' },
+      { name: 'survivingMask',  type: 'uint16' },
+      { name: 'score',          type: 'uint64' },
+      { name: 'declaredOrder',  type: 'uint8' },
     ],
     stateMutability: 'view',
   },
@@ -137,6 +184,85 @@ export const HEXCHAIN_ABI = [
     type: 'function', name: 'getNibbleMult',
     inputs: [{ name: 'roundId', type: 'uint256' }],
     outputs: [{ name: '', type: 'uint8[16]' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function', name: 'getPlayers',
+    inputs: [{ name: 'roundId', type: 'uint256' }],
+    outputs: [{ name: '', type: 'address[]' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function', name: 'commitB3',
+    inputs: [
+      { name: 'roundId', type: 'uint256' },
+      { name: 'nibble',  type: 'uint8' },
+    ],
+    outputs: [], stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function', name: 'declareExtraPick',
+    inputs: [
+      { name: 'roundId',     type: 'uint256' },
+      { name: 'extraNibble', type: 'uint8' },
+    ],
+    outputs: [], stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function', name: 'wasLastInPrevRound',
+    inputs: [{ name: 'roundId', type: 'uint256' }, { name: 'player', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function', name: 'declareAllIn',
+    inputs: [
+      { name: 'roundId',     type: 'uint256' },
+      { name: 'guessNibble', type: 'uint8' },
+    ],
+    outputs: [], stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function', name: 'setTrapOrder',
+    inputs: [
+      { name: 'roundId',   type: 'uint256' },
+      { name: 'trapOrder', type: 'uint8' },
+    ],
+    outputs: [], stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function', name: 'setPickTrap',
+    inputs: [
+      { name: 'roundId',    type: 'uint256' },
+      { name: 'trapNibble', type: 'uint8' },
+      { name: 'trapZone',   type: 'uint8' },
+    ],
+    outputs: [], stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function', name: 'setTarget',
+    inputs: [
+      { name: 'roundId', type: 'uint256' },
+      { name: 'target',  type: 'address' },
+    ],
+    outputs: [], stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function', name: 'getOverlappingNibbles',
+    inputs: [{ name: 'roundId', type: 'uint256' }],
+    outputs: [{ name: 'overlapMask', type: 'uint16' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function', name: 'getSurvivingCount',
+    inputs: [{ name: 'roundId', type: 'uint256' }, { name: 'target', type: 'address' }],
+    outputs: [{ name: '', type: 'uint8' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function', name: 'getOneSurvivingPick',
+    inputs: [{ name: 'roundId', type: 'uint256' }, { name: 'target', type: 'address' }],
+    outputs: [{ name: '', type: 'uint8' }],
     stateMutability: 'view',
   },
   // ── Events ──────────────────────────────────
@@ -215,12 +341,25 @@ export const HEXCHAIN_ABI = [
     anonymous: false,
   },
   {
-    type: 'event', name: 'PrizeSent',
+    type: 'event', name: 'ScoreBreakdownLogged',
     inputs: [
-      { name: 'roundId',   type: 'uint256', indexed: true },
-      { name: 'recipient', type: 'address', indexed: true },
-      { name: 'amount',    type: 'uint256', indexed: false },
-      { name: 'rank',      type: 'uint8',   indexed: false },
+      { name: 'roundId', type: 'uint256', indexed: true },
+      { name: 'player', type: 'address', indexed: true },
+      { name: 'finalMask', type: 'uint16', indexed: false },
+      { name: 'removedMask', type: 'uint16', indexed: false },
+      { name: 'basePickSumX10', type: 'uint16', indexed: false },
+      { name: 'eyeAppliedScoreX100', type: 'uint16', indexed: false },
+      { name: 'adjustmentX100', type: 'int32', indexed: false },
+      { name: 'effectivePerk', type: 'uint8', indexed: false },
+      { name: 'eyeSuccess', type: 'bool', indexed: false },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event', name: 'RoundCancelled',
+    inputs: [
+      { name: 'roundId', type: 'uint256', indexed: true },
+      { name: 'by',      type: 'address', indexed: true },
     ],
     anonymous: false,
   },
@@ -247,7 +386,8 @@ export const HEXCHAIN_ABI = [
   { type: 'error', name: 'TooEarlyToLockEye',      inputs: [] },
   { type: 'error', name: 'TooEarlyToOpenEye',      inputs: [] },
   { type: 'error', name: 'TooEarlyToSettle',       inputs: [] },
-  { type: 'error', name: 'TransferFailed',         inputs: [] },
-  { type: 'error', name: 'WrongEntryFee',          inputs: [] },
+  { type: 'error', name: 'NotParticipant',          inputs: [] },
   { type: 'error', name: 'NotOperator',            inputs: [] },
+  { type: 'error', name: 'InvalidTrap',            inputs: [] },
+  { type: 'error', name: 'InvalidTarget',          inputs: [] },
 ] as const

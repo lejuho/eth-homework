@@ -1,16 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { Cron } from '@nestjs/schedule'
 import { ChainService } from '../chain/chain.service'
-import { CommitService } from '../commit/commit.service'
 import { EyeRevealService } from '../eye-reveal/eye-reveal.service'
-import { ZkService } from '../zk/zk.service'
+import { ProofService } from '../proof/proof.service'
+import { DebugService } from '../debug/debug.service'
 
 /**
- * KeeperService v5 (Groth16 ZK)
+ * KeeperService v6 (client-side ZK)
  *
  * 상태 전환:
- *   OPEN(0)       → LOCKED(1)     : block > revealBlock       → lockRound()
- *   LOCKED(1)                     : block <= revealBlock + RW  → revealFor() (ZK proof)
+ *   OPEN(0)       → LOCKED(1)     : block > revealBlock, playerCount >= 2 → lockRound()
+ *   OPEN(0)       → SETTLED(4)    : block > lockBlock,  playerCount < 2   → expireRound()
+ *   LOCKED(1)                     : block <= revealBlock + RW  → revealFor() (stored proof)
  *   LOCKED(1)     → EYE_OPEN(2)   : block > revealBlock + RW  → openEyeGame()
  *   EYE_OPEN(2)   → EYE_LOCKED(3) : block > eyeRevealBlock    → lockEyeRound()
  *   EYE_LOCKED(3)                 : block <= eyeRevealBlock + ERW → eyeRevealFor()
@@ -25,30 +26,31 @@ export class KeeperService {
 
   constructor(
     private readonly chain:      ChainService,
-    private readonly commits:    CommitService,
     private readonly eyeReveals: EyeRevealService,
-    private readonly zk:         ZkService,
+    private readonly proofs:     ProofService,
+    private readonly debug:      DebugService,
   ) {}
+
+  private log(msg: string)  { this.logger.log(msg);  this.debug.push('log',   msg) }
+  private warn(msg: string) { this.logger.warn(msg); this.debug.push('warn',  msg) }
 
   @Cron('*/10 * * * * *')
   async tick() {
     if (this.isBusy) return
     this.isBusy = true
     try {
-      await this.checkRound()
+      await this.checkAllRounds()
     } catch (err) {
-      this.logger.warn(`tick error: ${(err as Error).message}`)
+      this.warn(`tick error: ${(err as Error).message}`)
     } finally {
       this.isBusy = false
     }
   }
 
-  private async checkRound() {
-    const roundId = await this.chain.getCurrentRoundId()
-    if (!roundId || roundId === 0n) return
-
-    const [info, block] = await Promise.all([
-      this.chain.getRoundInfo(roundId),
+  private async checkAllRounds() {
+    const [allRoundIds, openRoundIds, block] = await Promise.all([
+      this.chain.getAllActiveRoundIds(), // 비공개 방 포함 전체 스캔
+      this.chain.getOpenRoundIds(),      // Registry — 빈 슬롯 확인용
       this.chain.getBlockNumber(),
     ])
 
@@ -57,46 +59,92 @@ export class KeeperService {
     if (this.eyeRevealWindow === null)
       this.eyeRevealWindow = await this.chain.getConstant('EYE_REVEAL_WINDOW')
 
-    const rw  = this.revealWindow!
-    const erw = this.eyeRevealWindow!
+    // Registry 기준으로 빈 슬롯 없으면 새 방 생성
+    if (openRoundIds.length === 0) {
+      await this.tryCreateRoom()
+    } else {
+      const infos = await Promise.all(openRoundIds.map(id => this.chain.getRoundInfo(id)))
+      const hasOpenSlot = infos.some(i => i.state === 0 && i.playerCount < 3)
+      if (!hasOpenSlot) await this.tryCreateRoom()
+    }
 
-    // ── OPEN → LOCKED ───────────────────────────────────────────────────
-    if (info.state === 0 && block > info.revealBlock) {
-      this.logger.log(`[Round ${roundId}] lockRound 호출`)
+    // 비공개 방 포함 모든 활성 라운드 처리 (nonce 충돌 방지를 위해 순차 처리)
+    for (const roundId of allRoundIds) {
+      await this.checkRound(roundId, block)
+    }
+  }
+
+  private async tryCreateRoom() {
+    this.log('빈 방 없음 — 새 라운드 생성')
+    try {
+      const newRoundId = await this.chain.createRound()
+      this.log(`새 라운드 생성 완료: ${newRoundId}`)
+    } catch (err) {
+      this.warn(`createRound 실패: ${(err as Error).message}`)
+    }
+  }
+
+  private async checkRound(roundId: bigint, block: bigint) {
+    const info = await this.chain.getRoundInfo(roundId)
+    const rw   = this.revealWindow!
+    const erw  = this.eyeRevealWindow!
+
+    // ── OPEN: 인원 부족 만료 ────────────────────────────────────────────
+    if (info.state === 0 && block > info.lockBlock && info.playerCount < 2) {
+      this.log(`[Round ${roundId}] 인원 부족(${info.playerCount}명) — expireRound 호출`)
       try {
-        const hash = await this.chain.lockRound(roundId)
-        this.logger.log(`[Round ${roundId}] lockRound tx: ${hash}`)
+        const hash = await this.chain.expireRound(roundId)
+        await this.chain.waitForReceipt(hash)
+        this.log(`[Round ${roundId}] expireRound 완료`)
+        this.chain.unregisterRound(roundId).catch(() => { /* 비공개 방은 Registry 미등록 */ })
       } catch (err) {
-        this.logger.warn(`[Round ${roundId}] lockRound failed: ${(err as Error).message}`)
+        this.warn(`[Round ${roundId}] expireRound failed: ${(err as Error).message}`)
       }
       return
     }
 
-    // ── LOCKED: ZK proof 생성 → revealFor ───────────────────────────────
+    // ── OPEN → LOCKED ───────────────────────────────────────────────────
+    if (info.state === 0 && block > info.revealBlock) {
+      this.log(`[Round ${roundId}] lockRound 호출`)
+      try {
+        const hash = await this.chain.lockRound(roundId)
+        await this.chain.waitForReceipt(hash)
+        this.log(`[Round ${roundId}] lockRound 완료`)
+      } catch (err) {
+        this.warn(`[Round ${roundId}] lockRound failed: ${(err as Error).message}`)
+      }
+      return
+    }
+
+    // ── LOCKED: stored proof → revealFor (offline fallback) ─────────────
     if (info.state === 1 && block <= info.revealBlock + rw) {
-      const entries = this.commits.listRound(roundId.toString())
+      const entries = this.proofs.listRound(roundId.toString())
+      this.log(`[Round ${roundId}] LOCKED — 저장된 proof: ${entries.length}개 (block=${block} revealBlock=${info.revealBlock} rw=${rw})`)
       for (const entry of entries) {
         try {
-          const playerInfo = await this.chain.getPlayerInfo(roundId, entry.address)
-          if (playerInfo.revealed) continue
+          const playerInfo = await this.chain.getPlayerInfo(roundId, entry.address as `0x${string}`)
+          if (playerInfo.revealed) {
+            this.log(`[Round ${roundId}] revealFor ${entry.address}: 이미 리빌됨, skip`)
+            continue
+          }
 
-          // 온체인에 저장된 commitHash 읽기 (유저가 commit() 때 제출한 poseidon 해시)
-          const commitHash = await this.chain.getCommitHash(roundId, entry.address)
-          const salt       = BigInt(entry.data.salt)
-          const choices    = entry.data.choices
-
-          // ZK proof 생성 — circuit이 poseidon(choices, salt) == commitHash 를 검증
-          const proof = await this.zk.generateRevealProof(choices, salt, commitHash)
+          const { pA, pB, pC, pubSignals } = entry.proof
+          this.log(`[Round ${roundId}] revealFor ${entry.address} 호출 중...`)
 
           const hash = await this.chain.revealFor(
-            roundId, entry.address,
-            proof.pA, proof.pB, proof.pC, proof.pubSignals,
+            roundId,
+            entry.address as `0x${string}`,
+            pA.map(BigInt) as [bigint, bigint],
+            pB.map(r => r.map(BigInt)) as [[bigint, bigint], [bigint, bigint]],
+            pC.map(BigInt) as [bigint, bigint],
+            pubSignals.map(BigInt) as [bigint, bigint],
           )
-          this.logger.log(`[Round ${roundId}] revealFor ${entry.address}: ${hash}`)
+          await this.chain.waitForReceipt(hash)
+          this.log(`[Round ${roundId}] revealFor ${entry.address} 완료: ${hash}`)
         } catch (err) {
           const message = (err as Error).message
           if (!message.includes('AlreadyRevealed')) {
-            this.logger.warn(`[Round ${roundId}] revealFor ${entry.address} failed: ${message}`)
+            this.warn(`[Round ${roundId}] revealFor ${entry.address} 실패: ${message}`)
           }
         }
       }
@@ -104,24 +152,26 @@ export class KeeperService {
 
     // ── LOCKED → EYE_OPEN ───────────────────────────────────────────────
     if (info.state === 1 && block > info.revealBlock + rw) {
-      this.logger.log(`[Round ${roundId}] openEyeGame 호출`)
+      this.log(`[Round ${roundId}] openEyeGame 호출`)
       try {
         const hash = await this.chain.openEyeGame(roundId)
-        this.logger.log(`[Round ${roundId}] openEyeGame tx: ${hash}`)
+        await this.chain.waitForReceipt(hash)
+        this.log(`[Round ${roundId}] openEyeGame 완료`)
       } catch (err) {
-        this.logger.warn(`[Round ${roundId}] openEyeGame failed: ${(err as Error).message}`)
+        this.warn(`[Round ${roundId}] openEyeGame failed: ${(err as Error).message}`)
       }
       return
     }
 
     // ── EYE_OPEN → EYE_LOCKED ───────────────────────────────────────────
     if (info.state === 2 && block > info.eyeRevealBlock) {
-      this.logger.log(`[Round ${roundId}] lockEyeRound 호출`)
+      this.log(`[Round ${roundId}] lockEyeRound 호출`)
       try {
         const hash = await this.chain.lockEyeRound(roundId)
-        this.logger.log(`[Round ${roundId}] lockEyeRound tx: ${hash}`)
+        await this.chain.waitForReceipt(hash)
+        this.log(`[Round ${roundId}] lockEyeRound 완료`)
       } catch (err) {
-        this.logger.warn(`[Round ${roundId}] lockEyeRound failed: ${(err as Error).message}`)
+        this.warn(`[Round ${roundId}] lockEyeRound failed: ${(err as Error).message}`)
       }
       return
     }
@@ -138,11 +188,12 @@ export class KeeperService {
             roundId, entry.address,
             entry.data.order, entry.data.salt,
           )
-          this.logger.log(`[Round ${roundId}] eyeRevealFor ${entry.address} order=${entry.data.order}: ${hash}`)
+          await this.chain.waitForReceipt(hash)
+          this.log(`[Round ${roundId}] eyeRevealFor ${entry.address} order=${entry.data.order} 완료: ${hash}`)
         } catch (err) {
           const message = (err as Error).message
           if (!message.includes('AlreadyEyeRevealed')) {
-            this.logger.warn(`[Round ${roundId}] eyeRevealFor ${entry.address} failed: ${message}`)
+            this.warn(`[Round ${roundId}] eyeRevealFor ${entry.address} failed: ${message}`)
           }
         }
       }
@@ -150,12 +201,14 @@ export class KeeperService {
 
     // ── EYE_LOCKED → SETTLED ────────────────────────────────────────────
     if (info.state === 3 && block > info.eyeRevealBlock + erw) {
-      this.logger.log(`[Round ${roundId}] settle 호출`)
+      this.log(`[Round ${roundId}] settle 호출`)
       try {
         const hash = await this.chain.settle(roundId)
-        this.logger.log(`[Round ${roundId}] settle tx: ${hash}`)
+        await this.chain.waitForReceipt(hash)
+        this.log(`[Round ${roundId}] settle 완료`)
+        this.chain.unregisterRound(roundId).catch(() => { /* 비공개 방은 Registry 미등록 */ })
       } catch (err) {
-        this.logger.warn(`[Round ${roundId}] settle failed: ${(err as Error).message}`)
+        this.warn(`[Round ${roundId}] settle failed: ${(err as Error).message}`)
       }
       return
     }

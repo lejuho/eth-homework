@@ -1,25 +1,48 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
 import {
-  createPublicClient, createWalletClient, http, parseAbi,
+  createPublicClient, createWalletClient, http, parseAbi, decodeEventLog,
   type PublicClient, type WalletClient, type Chain, type Account,
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import { anvil, sepolia } from 'viem/chains'
+import { anvil, sepolia, baseSepolia } from 'viem/chains'
+
+const REGISTRY_ABI = parseAbi([
+  'function getOpenRounds() view returns (uint256[])',
+  'function isOpen(uint256 roundId) view returns (bool)',
+  'function register(uint256 roundId)',
+  'function unregister(uint256 roundId)',
+])
 
 const ABI = parseAbi([
+  'function createRound() returns (uint256 roundId)',
+  'event RoundCreated(uint256 indexed roundId, uint256 startBlock, uint256 lockBlock)',
   'function currentRoundId() view returns (uint256)',
-  'function commitments(uint256 roundId, address player) view returns (uint256 commitHash, bytes32 eyeCommitHash, uint16 pickedMask, uint16 survivingMask, uint8 eyeOrder, bool revealed, bool eyeRevealed, uint64 score)',
+  'function commitments(uint256 roundId, address player) view returns (uint256 commitHash, bytes32 eyeCommitHash, uint16 pickedMask, uint16 survivingMask, uint8 eyeOrder, uint8 perkId, uint8 declaredOrder, uint8 trapOrder, uint8 trapNibble, uint8 trapZone, address targetPlayer, bool revealed, bool eyeRevealed, uint64 score)',
   'function REVEAL_WINDOW() view returns (uint256)',
   'function EYE_REVEAL_WINDOW() view returns (uint256)',
-  'function getRoundInfo(uint256 roundId) view returns (uint8 state, uint64 startBlock, uint64 lockBlock, uint64 revealBlock, uint64 eyeLockBlock, uint64 eyeRevealBlock, uint16 playerCount, uint256 prizePool, bytes32 revealHash)',
-  'function getPlayerInfo(uint256 roundId, address player) view returns (bool hasCommitted, bool revealed, bool eyeRevealed, uint8 eyeOrder, uint16 survivingMask, uint64 score)',
+  'function getRoundInfo(uint256 roundId) view returns (uint8 state, uint64 startBlock, uint64 lockBlock, uint64 revealBlock, uint64 eyeLockBlock, uint64 eyeRevealBlock, uint16 playerCount, bytes32 revealHash)',
+  'function getPlayerInfo(uint256 roundId, address player) view returns (bool hasCommitted, bool revealed, bool eyeRevealed, uint8 eyeOrder, uint8 perkId, uint16 survivingMask, uint64 score)',
+  'function getPlayers(uint256 roundId) view returns (address[])',
+  'function getOverlappingNibbles(uint256 roundId) view returns (uint16 overlapMask)',
   'function getNibbleMult(uint256 roundId) view returns (uint8[16])',
   'function revealFor(uint256 roundId, address player, uint256[2] pA, uint256[2][2] pB, uint256[2] pC, uint256[2] pubSignals)',
   'function eyeRevealFor(uint256 roundId, address player, uint8 order, bytes32 salt)',
   'function lockRound(uint256 roundId)',
+  'function expireRound(uint256 roundId)',
   'function openEyeGame(uint256 roundId)',
   'function lockEyeRound(uint256 roundId)',
   'function settle(uint256 roundId)',
+  'error TooEarlyToLock()',
+  'error TooEarlyToOpenEye()',
+  'error TooEarlyToLockEye()',
+  'error TooEarlyToSettle()',
+  'error RoundNotOpen()',
+  'error RoundNotLocked()',
+  'error RoundNotEyeOpen()',
+  'error RoundNotEyeLocked()',
+  'error AlreadyRevealed()',
+  'error AlreadyEyeRevealed()',
+  'error NotEnoughPlayers()',
 ])
 
 export interface RoundInfo {
@@ -30,7 +53,6 @@ export interface RoundInfo {
   eyeLockBlock:   bigint
   eyeRevealBlock: bigint
   playerCount:    number
-  prizePool:      bigint
   revealHash:     `0x${string}`
 }
 
@@ -40,6 +62,7 @@ export class ChainService implements OnModuleInit {
   private publicClient!: PublicClient
   private walletClient!: WalletClient
   private contractAddress!: `0x${string}`
+  private registryAddress: `0x${string}` | null = null
   private account!: Account
 
   onModuleInit() {
@@ -49,15 +72,22 @@ export class ChainService implements OnModuleInit {
       process.env.KEEPER_PRIVATE_KEY
     ) as `0x${string}` | undefined
     const addr   = process.env.CONTRACT_ADDRESS   as `0x${string}` | undefined
+    const regAddr = process.env.REGISTRY_ADDRESS  as `0x${string}` | undefined
 
     if (!pk)   throw new Error('OPERATOR_PRIVATE_KEY or KEEPER_PRIVATE_KEY is not set')
     if (!addr) throw new Error('CONTRACT_ADDRESS is not set')
 
-    this.contractAddress = addr
+    this.contractAddress  = addr
+    this.registryAddress  = regAddr ?? null
+    if (regAddr) this.logger.log(`Registry: ${regAddr}`)
+    else this.logger.warn('REGISTRY_ADDRESS not set — multi-room disabled')
     this.account         = privateKeyToAccount(pk)
 
     const chain: Chain = rpcUrl.includes('localhost') || rpcUrl.includes('127.0.0.1')
-      ? anvil : sepolia
+      ? anvil
+      : rpcUrl.includes('base-sepolia') || rpcUrl.includes('84532')
+      ? baseSepolia
+      : sepolia
     const transport = http(rpcUrl)
 
     this.publicClient = createPublicClient({ chain, transport }) as PublicClient
@@ -73,11 +103,61 @@ export class ChainService implements OnModuleInit {
     }) as Promise<bigint>
   }
 
+  /** Registry에서 OPEN 상태 라운드 목록 반환 (프론트 퀵매칭 / 빈 슬롯 확인용) */
+  async getOpenRoundIds(): Promise<bigint[]> {
+    if (this.registryAddress) {
+      const ids = await this.publicClient.readContract({
+        address: this.registryAddress, abi: REGISTRY_ABI, functionName: 'getOpenRounds',
+      }) as bigint[]
+      return ids
+    }
+    // 폴백: 모든 활성 라운드
+    return this.getAllActiveRoundIds()
+  }
+
+  /** Keeper 처리용: 0 ~ currentRoundId-1 범위를 스캔해 SETTLED가 아닌 라운드 모두 반환.
+   *  비공개 방처럼 Registry에 없는 라운드도 포함됩니다. */
+  async getAllActiveRoundIds(): Promise<bigint[]> {
+    const nextId = await this.getCurrentRoundId() // _nextRoundId
+    if (nextId === 0n) return []
+    // createRound uses ++_nextRoundId (pre-increment), so roundIds are 1..nextId
+    const ids = Array.from({ length: Number(nextId) }, (_, i) => BigInt(i + 1))
+    const infos = await Promise.all(ids.map(id => this.getRoundInfo(id)))
+    // startBlock=0 은 미존재 라운드(++_nextRoundId 이전 슬롯), state=4 는 SETTLED
+    return ids.filter((_, i) => infos[i].startBlock !== 0n && infos[i].state !== 4)
+  }
+
+  /** Registry에 roundId 등록 (createRound 후 Keeper가 호출) */
+  async registerRound(roundId: bigint): Promise<`0x${string}` | null> {
+    if (!this.registryAddress) return null
+    const { request } = await this.publicClient.simulateContract({
+      address: this.registryAddress, abi: REGISTRY_ABI,
+      functionName: 'register', args: [roundId],
+      account: this.account,
+    })
+    return this.walletClient.writeContract(request)
+  }
+
+  /** Registry에서 roundId 제거 (lockRound/expireRound/settle 후 Keeper가 호출) */
+  async unregisterRound(roundId: bigint): Promise<`0x${string}` | null> {
+    if (!this.registryAddress) return null
+    try {
+      const { request } = await this.publicClient.simulateContract({
+        address: this.registryAddress, abi: REGISTRY_ABI,
+        functionName: 'unregister', args: [roundId],
+        account: this.account,
+      })
+      return this.walletClient.writeContract(request)
+    } catch {
+      return null // 이미 제거되었거나 미등록
+    }
+  }
+
   async getRoundInfo(roundId: bigint): Promise<RoundInfo> {
     const r = await this.publicClient.readContract({
       address: this.contractAddress, abi: ABI,
       functionName: 'getRoundInfo', args: [roundId],
-    }) as readonly [number, bigint, bigint, bigint, bigint, bigint, number, bigint, `0x${string}`]
+    }) as readonly [number, bigint, bigint, bigint, bigint, bigint, number, `0x${string}`]
 
     return {
       state:          Number(r[0]),
@@ -87,8 +167,7 @@ export class ChainService implements OnModuleInit {
       eyeLockBlock:   r[4],
       eyeRevealBlock: r[5],
       playerCount:    Number(r[6]),
-      prizePool:      r[7],
-      revealHash:     r[8],
+      revealHash:     r[7],
     }
   }
 
@@ -132,18 +211,34 @@ export class ChainService implements OnModuleInit {
     return r[0]
   }
 
+  async getPlayers(roundId: bigint): Promise<`0x${string}`[]> {
+    return this.publicClient.readContract({
+      address: this.contractAddress, abi: ABI,
+      functionName: 'getPlayers', args: [roundId],
+    }) as Promise<`0x${string}`[]>
+  }
+
+  async getOverlappingNibbles(roundId: bigint): Promise<number> {
+    const mask = await this.publicClient.readContract({
+      address: this.contractAddress, abi: ABI,
+      functionName: 'getOverlappingNibbles', args: [roundId],
+    }) as bigint | number
+    return Number(mask)
+  }
+
   async getPlayerInfo(roundId: bigint, player: `0x${string}`) {
     const r = await this.publicClient.readContract({
       address: this.contractAddress, abi: ABI,
       functionName: 'getPlayerInfo', args: [roundId, player],
-    }) as readonly [boolean, boolean, boolean, number, number, bigint]
+    }) as readonly [boolean, boolean, boolean, number, number, number, bigint]
     return {
       hasCommitted: r[0],
       revealed:     r[1],
       eyeRevealed:  r[2],
       eyeOrder:     r[3],
-      survivingMask: r[4],
-      score:        r[5],
+      perkId:       r[4],
+      survivingMask: r[5],
+      score:        r[6],
     }
   }
 
@@ -168,9 +263,27 @@ export class ChainService implements OnModuleInit {
   }
 
   async lockRound(roundId: bigint)    { return this.write('lockRound',    [roundId]) }
+  async expireRound(roundId: bigint)  { return this.write('expireRound',  [roundId]) }
   async openEyeGame(roundId: bigint)  { return this.write('openEyeGame',  [roundId]) }
   async lockEyeRound(roundId: bigint) { return this.write('lockEyeRound', [roundId]) }
   async settle(roundId: bigint)       { return this.write('settle',       [roundId]) }
+
+  /** 새 라운드 생성 후 Registry에 등록. 생성된 roundId 반환 */
+  async createRound(): Promise<bigint> {
+    const hash = await this.write('createRound', [])
+    const receipt = await this.waitForReceipt(hash)
+    for (const log of receipt.logs) {
+      try {
+        const decoded = decodeEventLog({ abi: ABI, eventName: 'RoundCreated', topics: log.topics, data: log.data })
+        const roundId = (decoded.args as { roundId: bigint }).roundId
+        const regHash = await this.registerRound(roundId)
+        if (regHash) await this.waitForReceipt(regHash)
+        this.logger.log(`createRound: round ${roundId} 생성 및 등록 완료`)
+        return roundId
+      } catch { /* 이 로그가 아님 */ }
+    }
+    throw new Error('createRound: RoundCreated 이벤트를 receipt에서 찾을 수 없음')
+  }
 
   async waitForReceipt(hash: `0x${string}`) {
     return this.publicClient.waitForTransactionReceipt({ hash })

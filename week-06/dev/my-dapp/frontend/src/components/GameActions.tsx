@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
-import { hexChainContract } from '@/lib/config'
+import { hexChainContract, REGISTRY_ADDRESS, REGISTRY_ENABLED } from '@/lib/config'
+import { decodeEventLog } from 'viem'
+import { HEXCHAIN_ABI, REGISTRY_ABI } from '@/lib/abi'
 
 interface ButtonProps {
   label: string
@@ -42,7 +44,73 @@ function ActionButton({
   )
 }
 
-export function CreateRoundButton({ onSuccess }: { onSuccess?: () => void }) {
+export function CreateRoundButton({
+  onSuccess,
+  onError,
+  label = '매칭 시작',
+}: {
+  onSuccess?: (roundId: bigint) => void
+  onError?: () => void
+  label?: string
+}) {
+  const [isDone, setIsDone] = useState(false)
+  const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const { writeContract: registryWrite } = useWriteContract()
+  const { data: receipt, isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+
+  useEffect(() => {
+    if (!isSuccess || !receipt) return
+
+    let createdRoundId: bigint | null = null
+    for (const log of receipt.logs) {
+      try {
+        const decoded = decodeEventLog({
+          abi: HEXCHAIN_ABI,
+          data: log.data,
+          topics: log.topics,
+        })
+        if (decoded.eventName === 'RoundCreated') {
+          createdRoundId = decoded.args.roundId as bigint
+          break
+        }
+      } catch {
+        continue
+      }
+    }
+
+    setIsDone(true)
+    if (createdRoundId !== null) {
+      // Registry가 설정된 경우 register() 호출 (permissionless)
+      if (REGISTRY_ENABLED) {
+        registryWrite({
+          address: REGISTRY_ADDRESS,
+          abi: REGISTRY_ABI,
+          functionName: 'register',
+          args: [createdRoundId],
+        })
+      }
+      onSuccess?.(createdRoundId)
+    }
+  }, [isSuccess, receipt, onSuccess]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (error) onError?.()
+  }, [error, onError])
+
+  return (
+    <ActionButton
+      label={label}
+      onClick={() => writeContract({ ...hexChainContract, functionName: 'createRound' })}
+      isPending={isPending}
+      isConfirming={isConfirming}
+      isDone={isDone}
+      error={error}
+      variant="primary"
+    />
+  )
+}
+
+export function CancelRoundButton({ roundId, onSuccess }: { roundId: bigint; onSuccess?: () => void }) {
   const [isDone, setIsDone] = useState(false)
   const { writeContract, data: hash, isPending, error } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
@@ -53,12 +121,13 @@ export function CreateRoundButton({ onSuccess }: { onSuccess?: () => void }) {
 
   return (
     <ActionButton
-      label="Create New Round"
-      onClick={() => writeContract({ ...hexChainContract, functionName: 'createRound' })}
+      label="나가기 (라운드 취소)"
+      onClick={() => writeContract({ ...hexChainContract, functionName: 'cancelRound', args: [roundId] })}
       isPending={isPending}
       isConfirming={isConfirming}
       isDone={isDone}
       error={error}
+      variant="secondary"
     />
   )
 }

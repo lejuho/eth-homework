@@ -135,9 +135,9 @@ const STEPS = [
   { title: 'Lock Round (Keeper)', desc: '커밋 윈도우가 끝나면 Keeper가 블록 해시를 확정합니다.' },
   { title: 'Reveal — 픽 공개', desc: '커밋했던 4개 픽과 salt를 공개합니다. 블록 해시와 대조해 검증됩니다.' },
   { title: 'Open Eye Game (Keeper)', desc: 'Keeper가 소수자 계산을 완료하고 눈치게임을 시작합니다.' },
-  { title: 'Eye Commit — 순서 봉인', desc: '1·2·3번 중 원하는 순서를 salt와 함께 해시로 제출합니다.' },
-  { title: 'Lock Eye Round (Keeper)', desc: '눈치 커밋 윈도우가 끝나면 Keeper가 라운드를 잠급니다.' },
-  { title: 'Eye Reveal — 순서 공개', desc: '커밋했던 눈치 순서와 salt를 공개합니다.' },
+  { title: 'Seq Commit — 순서 봉인', desc: '1·2·3번 중 원하는 순서를 salt와 함께 해시로 제출합니다.' },
+  { title: 'Lock Seq Round (Keeper)', desc: '순서 커밋 윈도우가 끝나면 Keeper가 라운드를 잠급니다.' },
+  { title: 'Seq Reveal — 순서 공개', desc: '커밋했던 순서와 salt를 공개합니다.' },
   { title: 'Settle (Keeper)', desc: '최종 점수 계산 후 상금이 NFT 소유자에게 자동 분배됩니다.' },
 ]
 

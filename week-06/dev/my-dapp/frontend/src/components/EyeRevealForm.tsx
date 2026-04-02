@@ -51,8 +51,8 @@ export function EyeRevealForm({ roundId, onSuccess }: Props) {
       <div className="hx-hint red" style={{ margin: '0 20px' }}>
         <span style={{ fontSize: 14, flexShrink: 0 }}>⚠</span>
         <div>
-          <div style={{ fontWeight: 600, marginBottom: 2 }}>Eye commit 데이터 없음</div>
-          <div style={{ fontSize: 11 }}>이 브라우저에서 eyeCommit을 하지 않았거나 데이터가 삭제되었습니다.</div>
+          <div style={{ fontWeight: 600, marginBottom: 2 }}>SEQ commit 데이터 없음</div>
+          <div style={{ fontSize: 11 }}>이 브라우저에서 seqCommit을 하지 않았거나 데이터가 삭제되었습니다.</div>
         </div>
       </div>
     )
@@ -132,7 +132,7 @@ export function EyeRevealForm({ roundId, onSuccess }: Props) {
       <div style={{ height: 12 }} />
       <div className="hx-hint" style={{ margin: '0 20px' }}>
         <span style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>ℹ</span>
-        <div>서명 후 keeper에게 전달됩니다. Keeper가 EYE_LOCKED 이후 대신 공개합니다. (가스 없음)</div>
+        <div>서명 후 keeper에게 전달됩니다. Keeper가 SEQ_LOCKED 이후 대신 공개합니다. (가스 없음)</div>
       </div>
 
       <div style={{ height: 16 }} />

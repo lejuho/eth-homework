@@ -10,9 +10,11 @@ exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
 const schedule_1 = require("@nestjs/schedule");
 const chain_module_1 = require("./chain/chain.module");
-const commit_module_1 = require("./commit/commit.module");
 const eye_reveal_module_1 = require("./eye-reveal/eye-reveal.module");
+const info_access_module_1 = require("./info-access/info-access.module");
 const keeper_module_1 = require("./keeper/keeper.module");
+const proof_module_1 = require("./proof/proof.module");
+const debug_module_1 = require("./debug/debug.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -21,9 +23,11 @@ exports.AppModule = AppModule = __decorate([
         imports: [
             schedule_1.ScheduleModule.forRoot(),
             chain_module_1.ChainModule,
-            commit_module_1.CommitModule,
             eye_reveal_module_1.EyeRevealModule,
+            info_access_module_1.InfoAccessModule,
             keeper_module_1.KeeperModule,
+            proof_module_1.ProofModule,
+            debug_module_1.DebugModule,
         ],
     })
 ], AppModule);
