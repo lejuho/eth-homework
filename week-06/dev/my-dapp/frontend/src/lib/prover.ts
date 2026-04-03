@@ -78,13 +78,10 @@ export async function generateRevealProof(
   progress(12, 'WASM witness 계산 시작')
   flog('[ZK] 12% — WASM witness 계산 시작')
 
-  const logger = makeSnarkLogger(progress)
-
   const { proof, publicSignals } = await snarkjs.groth16.fullProve(
     input,
     '/zk/reveal.wasm',
     '/zk/reveal_0001.zkey',
-    logger,
   )
 
   progress(98, '결과 직렬화')
