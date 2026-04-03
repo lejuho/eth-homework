@@ -149,7 +149,7 @@ export function SettledResults({ roundId, players }: Props) {
 
   // 순서별 시차 등장
   useEffect(() => {
-    if (!results || results === false || results === null || results.cancelled) return
+    if (!results || results.cancelled) return
 
     // eyeOrder 기준 순서대로 등장
     const orders = [1, 2, 3]
