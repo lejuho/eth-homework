@@ -24,7 +24,7 @@ export function B3CommitForm({ roundId, revealHash, onSuccess }: Props) {
   useEffect(() => {
     if (isSuccess && selected !== null) {
       // B3: 단일 픽을 choices에 저장 (이전 게임 stale 데이터 덮어쓰기)
-      saveCommit({ choices: [selected], salt: 0, perkId: 9 })
+      saveCommit({ choices: [selected], salt: '0x0', perkId: 9 })
       setIsDone(true)
       onSuccess()
     }
